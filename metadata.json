@@ -1,0 +1,7 @@
+{
+  "name": "CYT Touch",
+  "description": "A touch-friendly dashboard for Chasing Your Tail NG. Optimized for Raspberry Pi 7-inch screens with AI-powered signal analysis.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
