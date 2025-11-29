@@ -23,7 +23,14 @@ You need a Raspberry Pi running Raspberry Pi OS (Lite or Desktop).
    npm install
    ```
 
-3. **Configure API Key (Optional but Recommended):**
+3. **⚠️ Important: Fix Filenames:**
+   If the scripts downloaded with `.md` extensions, run this command to fix them:
+   ```bash
+   mv cyt_bridge.py.md cyt_bridge.py 2>/dev/null
+   mv start_cyt.sh.md start_cyt.sh 2>/dev/null
+   ```
+
+4. **Configure API Key (Optional but Recommended):**
    Create a `.env` file for AI analysis:
    ```bash
    echo "API_KEY=your_google_api_key_here" > .env
@@ -31,7 +38,7 @@ You need a Raspberry Pi running Raspberry Pi OS (Lite or Desktop).
 
 ## 🎮 How to Run
 
-**The Easy Way:**
+**The Easy Way (Launcher Script):**
 Run the included launcher script. It handles the Python backend and the Frontend automatically.
 
 ```bash
@@ -39,9 +46,9 @@ chmod +x start_cyt.sh
 ./start_cyt.sh
 ```
 
-**The Manual Way:**
-1. Terminal 1: `python3 cyt_bridge.py`
-2. Terminal 2: `npm run dev`
+**The Alternative Way (If script fails):**
+1. Terminal 1 (Bridge): `npm run start:bridge`
+2. Terminal 2 (App): `npm run dev`
 
 Then open Chromium on the Pi and go to: `http://localhost:3000`
 
