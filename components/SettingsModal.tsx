@@ -120,7 +120,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                   <div className="text-xs text-slate-400 mt-1">
                     {apiKeyPresent 
                       ? 'Gemini AI services are fully operational.' 
-                      : 'Create a .env file with API_KEY to enable AI analysis.'}
+                      : 'Create a .env file with VITE_API_KEY to enable AI analysis.'}
                   </div>
                 </div>
              </div>

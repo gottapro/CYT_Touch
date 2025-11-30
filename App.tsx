@@ -117,6 +117,12 @@ const App: React.FC = () => {
   const userLocation = useRef({ lat: 34.0522, lng: -118.2437 });
   const scanIntervalRef = useRef<number | null>(null);
   const watchIdRef = useRef<number | null>(null);
+  
+  // Ref to track latest devices for the interval closure
+  const devicesRef = useRef(devices);
+  useEffect(() => {
+      devicesRef.current = devices;
+  }, [devices]);
 
   // --- EFFECTS ---
   useEffect(() => {
@@ -184,8 +190,10 @@ const App: React.FC = () => {
       let currentDevice = reading;
 
       if (!isNew) {
-        // Update existing
-        const existing = map.get(reading.mac)!;
+        // Update existing - Create a copy to avoid mutation
+        const existingOriginal = map.get(reading.mac)!;
+        const existing = { ...existingOriginal };
+        
         existing.lastSeen = now;
         existing.rssi = reading.rssi;
         // Only update GPS if the new reading actually HAS data, otherwise keep old
@@ -213,30 +221,31 @@ const App: React.FC = () => {
         map.set(reading.mac, existing);
       } else {
         // New Device Detected
+        // Ensure we are working with a copy or new object (reading is already new from parseBackendData but let's be safe if we mutate it)
+        currentDevice = { ...reading };
         
         // If device has no GPS from Kismet, use our browser location
-        if (!reading.gps && userLocation.current.lat !== 0) {
-            reading.gps = { ...userLocation.current };
+        if (!currentDevice.gps && userLocation.current.lat !== 0) {
+            currentDevice.gps = { ...userLocation.current };
         }
 
         // Fingerprint Check
-        const match = findFingerprintMatch(reading.probedSSIDs, Array.from(map.values()));
+        const match = findFingerprintMatch(currentDevice.probedSSIDs, Array.from(map.values()));
         
         if (match) {
-           reading.suspectedAlias = match.mac;
+           currentDevice.suspectedAlias = match.mac;
            // Auto-tracking handover
            if (match.isTracked) {
-             reading.isTracked = true;
-             reading.notes = `Auto-tracked: Alias of ${match.mac}`;
+             currentDevice.isTracked = true;
+             currentDevice.notes = `Auto-tracked: Alias of ${match.mac}`;
            }
            // Inherit threat level if higher
            if (match.threatLevel === ThreatLevel.HIGH || match.threatLevel === ThreatLevel.SUSPICIOUS) {
-              reading.threatLevel = match.threatLevel;
+              currentDevice.threatLevel = match.threatLevel;
            }
         }
 
-        currentDevice = reading;
-        map.set(reading.mac, reading);
+        map.set(currentDevice.mac, currentDevice);
       }
 
       // --- RED ALERT TRIGGER ---
@@ -397,7 +406,8 @@ const App: React.FC = () => {
            setCpuTemp(45 + Math.random() * 5); // Simulate temp
 
            const readings: WifiDevice[] = [];
-           devices.forEach(d => {
+           // Use devicesRef.current to get the latest state inside the interval
+           devicesRef.current.forEach(d => {
              if (Math.random() > 0.3) {
                 const updated = {...d};
                 if (updated.gps) {
@@ -412,8 +422,8 @@ const App: React.FC = () => {
 
            if (Math.random() > 0.5) {
              const newDev = generateRandomDevice(userLocation.current.lat, userLocation.current.lng);
-             if (Math.random() > 0.7 && devices.length > 0) {
-               const target = devices[Math.floor(Math.random() * devices.length)];
+             if (Math.random() > 0.7 && devicesRef.current.length > 0) {
+               const target = devicesRef.current[Math.floor(Math.random() * devicesRef.current.length)];
                if (target.probedSSIDs.length >= 2) {
                  newDev.probedSSIDs = [...target.probedSSIDs]; 
                }

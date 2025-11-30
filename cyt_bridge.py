@@ -30,6 +30,9 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
 
     def get_cpu_temp(self):
         """Read the Raspberry Pi CPU temperature."""
+        if sys.platform != "linux":
+            return 0.0
+            
         try:
             with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
                 temp_str = f.read().strip()

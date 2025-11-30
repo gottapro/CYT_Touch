@@ -2,16 +2,16 @@ import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { WifiDevice, AnalysisResult } from '../types';
 
 export const isConfigured = (): boolean => {
-  return !!process.env.API_KEY;
+  return !!import.meta.env.VITE_API_KEY;
 };
 
 export const analyzeDeviceSignature = async (device: WifiDevice): Promise<AnalysisResult> => {
-  // The API key must be obtained exclusively from the environment variable process.env.API_KEY.
-  const apiKey = process.env.API_KEY;
+  // The API key must be obtained exclusively from the environment variable import.meta.env.VITE_API_KEY.
+  const apiKey = import.meta.env.VITE_API_KEY;
   
   if (!apiKey) {
     return {
-      summary: "API Configuration Missing. Please set API_KEY in your environment variables (.env file).",
+      summary: "API Configuration Missing. Please set VITE_API_KEY in your environment variables (.env file).",
       threatScore: 0,
       recommendation: "Config Error"
     };

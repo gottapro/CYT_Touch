@@ -33,7 +33,7 @@ You need a Raspberry Pi running Raspberry Pi OS (Lite or Desktop).
 4. **Configure API Key (Optional but Recommended):**
    Create a `.env` file for AI analysis:
    ```bash
-   echo "API_KEY=your_google_api_key_here" > .env
+   echo "VITE_API_KEY=your_google_api_key_here" > .env
    ```
 
 ## 🎮 How to Run
