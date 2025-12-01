@@ -68,7 +68,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
             <div className="flex items-center gap-3 p-3 bg-slate-800 rounded-lg border border-slate-700">
               <Trash2 className="text-red-400" size={24} />
               <div className="text-sm text-slate-400">
-                Go to <span className="font-bold text-white">Settings > Purge Kismet DB</span> to wipe the slate clean.
+                Go to <span className="font-bold text-white">Settings {'>'} Purge Kismet DB</span> to wipe the slate clean.
               </div>
             </div>
           </div>
