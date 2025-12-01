@@ -46,14 +46,17 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
         
         # Endpoint: System Health (CPU Temp)
         if self.path == '/system':
-            self.send_response(200)
-            self._set_headers()
-            stats = {
-                'cpu_temp': self.get_cpu_temp(),
-                'status': 'online',
-                'backend': 'kismet'
-            }
-            self.wfile.write(json.dumps(stats).encode())
+            try:
+                self.send_response(200)
+                self._set_headers()
+                stats = {
+                    'cpu_temp': self.get_cpu_temp(),
+                    'status': 'online',
+                    'backend': 'kismet'
+                }
+                self.wfile.write(json.dumps(stats).encode())
+            except (BrokenPipeError, ConnectionResetError):
+                pass
             return
 
         # Endpoint: Device Data (Proxy to Kismet)
@@ -130,9 +133,12 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
             # You could uncomment the line below if you have a cleanup script:
             # os.system("./clean_kismet.sh") 
             
-            self.send_response(200)
-            self._set_headers()
-            self.wfile.write(json.dumps({'status': 'executed', 'message': 'Purge command received'}).encode())
+            try:
+                self.send_response(200)
+                self._set_headers()
+                self.wfile.write(json.dumps({'status': 'executed', 'message': 'Purge command received'}).encode())
+            except (BrokenPipeError, ConnectionResetError):
+                pass
             return
             
         self.send_response(404)
@@ -140,9 +146,9 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     # Allow the port to be reused immediately after restart
-    socketserver.TCPServer.allow_reuse_address = True
+    socketserver.ThreadingTCPServer.allow_reuse_address = True
     
-    with socketserver.TCPServer(("", PORT), CytBridgeHandler) as httpd:
+    with socketserver.ThreadingTCPServer(("", PORT), CytBridgeHandler) as httpd:
         print("------------------------------------------------")
         print(f" CYT Bridge Server Running on Port {PORT}")
         print(f" Target Kismet URL: {KISMET_URL}")
