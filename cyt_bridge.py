@@ -90,21 +90,29 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 self._set_headers()
                 self.wfile.write(data)
                 
+            except (BrokenPipeError, ConnectionResetError):
+                pass
             except urllib.error.URLError as e:
                 # Kismet is probably not running
                 print(f"Error connecting to Kismet: {e}")
-                self.send_response(502)
-                self._set_headers()
-                error_msg = {
-                    'error': 'Could not connect to Kismet', 
-                    'details': str(e),
-                    'suggestion': 'Ensure Kismet is running (systemctl start kismet)'
-                }
-                self.wfile.write(json.dumps(error_msg).encode())
+                try:
+                    self.send_response(502)
+                    self._set_headers()
+                    error_msg = {
+                        'error': 'Could not connect to Kismet', 
+                        'details': str(e),
+                        'suggestion': 'Ensure Kismet is running (systemctl start kismet)'
+                    }
+                    self.wfile.write(json.dumps(error_msg).encode())
+                except:
+                    pass
             except Exception as e:
-                self.send_response(500)
-                self._set_headers()
-                self.wfile.write(json.dumps({'error': str(e)}).encode())
+                try:
+                    self.send_response(500)
+                    self._set_headers()
+                    self.wfile.write(json.dumps({'error': str(e)}).encode())
+                except:
+                    pass
             return
         
         # Default: Not Found
