@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Radar, Settings, Play, Square, Search, AlertCircle, RefreshCw, HelpCircle, Thermometer } from 'lucide-react';
+import { Radar, Settings, Play, Square, Search, AlertCircle, RefreshCw, HelpCircle, Thermometer, EyeOff } from 'lucide-react';
 import { WifiDevice, DeviceType, ThreatLevel, AnalysisResult, AppSettings, GPSCoordinate } from './types';
 import { DeviceCard } from './components/DeviceCard';
 import { AnalysisModal } from './components/AnalysisModal';
@@ -448,6 +448,11 @@ const App: React.FC = () => {
     setDevices(prev => prev.map(d => d.mac === mac ? { ...d, isTracked: !d.isTracked, isIgnored: false } : d));
   };
 
+  const handleTailAll = () => {
+    // Ignore all devices that are NOT currently being tracked
+    setDevices(prev => prev.map(d => d.isTracked ? d : { ...d, isIgnored: true }));
+  };
+
   const handleAnalyze = async (device: WifiDevice) => {
     setSelectedDevice(device);
     setAnalysisModalOpen(true);
@@ -610,6 +615,14 @@ const App: React.FC = () => {
                   START SCAN
                 </>
               )}
+            </button>
+            
+            <button 
+              className="flex-none w-20 bg-slate-800 text-slate-300 rounded-2xl flex items-center justify-center border border-slate-700 active:bg-slate-700 active:scale-95 transition-all"
+              onClick={handleTailAll}
+              aria-label="Tail All"
+            >
+              <EyeOff size={28} />
             </button>
             
             <button 
