@@ -59,12 +59,29 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
         # Endpoint: Device Data (Proxy to Kismet)
         if self.path == '/devices':
             try:
-                # 1. Connect to Kismet
+                # 1. Get API Key (if exists)
+                api_key = ""
+                if os.path.exists("kismet_api_key.txt"):
+                    with open("kismet_api_key.txt", "r") as f:
+                        api_key = f.read().strip()
+
+                # 2. Connect to Kismet
                 # We use the 'devices' view to get the list of active devices
                 url = f"{KISMET_URL}/devices/views/all/devices.json"
                 req = urllib.request.Request(url)
                 
-                # 2. Fetch Data
+                # Add Auth Header if key exists. 
+                # Kismet usually expects "Cookie: KISMET=..." or standard Basic Auth?
+                # Modern Kismet uses "Cookie" for session or "X-Kismet-Auth" header depending on version.
+                # Standard API token usage often works via Cookie or URI param. 
+                # Let's try the URI param method first as it's robust, or Cookie.
+                # Actually, standard Kismet 2022+ creates an API key that is "KISMET <key>".
+                # The documentation says: send as Cookie "KISMET=<key>"
+                
+                if api_key:
+                     req.add_header('Cookie', f"KISMET={api_key}")
+
+                # 3. Fetch Data
                 with urllib.request.urlopen(req, timeout=5) as response:
                     data = response.read()
                     
@@ -75,6 +92,7 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 
             except urllib.error.URLError as e:
                 # Kismet is probably not running
+                print(f"Error connecting to Kismet: {e}")
                 self.send_response(502)
                 self._set_headers()
                 error_msg = {
