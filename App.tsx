@@ -308,6 +308,13 @@ const App: React.FC = () => {
              // Time handling
              const firstSeen = item['kismet.device.base.first_time'] ? item['kismet.device.base.first_time'] * 1000 : Date.now();
              const lastSeen = item['kismet.device.base.last_time'] ? item['kismet.device.base.last_time'] * 1000 : Date.now();
+             
+             // PHY Type Detection
+             const phy = item['kismet.device.base.phyname'] || 'IEEE802.11';
+             let type = DeviceType.STATION;
+             if (phy.includes('Bluetooth')) {
+                type = phy.includes('LE') ? DeviceType.BLE : DeviceType.BLUETOOTH;
+             }
 
              // Try to extract probes (complex in Kismet, simplified here)
              const probes: string[] = []; 
@@ -319,7 +326,7 @@ const App: React.FC = () => {
                  firstSeen: firstSeen, 
                  lastSeen: lastSeen,
                  vendor: manuf,
-                 type: DeviceType.STATION,
+                 type: type,
                  threatLevel: assessThreatLevel(manuf, name, rssi),
                  isIgnored: false,
                  isTracked: false,
