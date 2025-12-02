@@ -311,9 +311,16 @@ const App: React.FC = () => {
              
              // PHY Type Detection
              const phy = item['kismet.device.base.phyname'] || 'IEEE802.11';
-             let type = DeviceType.STATION;
+             const kismetType = item['kismet.device.base.type'] || '';
+             
+             let type = DeviceType.STATION; // Default to Client/Station
+             
              if (phy.includes('Bluetooth')) {
                 type = phy.includes('LE') ? DeviceType.BLE : DeviceType.BLUETOOTH;
+             } else if (kismetType === 'Wi-Fi AP') {
+                type = DeviceType.AP;
+             } else if (kismetType === 'Wi-Fi Bridged') {
+                type = DeviceType.AP; // Treat bridged devices as infrastructure
              }
 
              // Try to extract probes (complex in Kismet, simplified here)

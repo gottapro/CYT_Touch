@@ -71,7 +71,7 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
 
                 # 2. Connect to Kismet
                 # OPTIMIZATION: Request only the fields we need to reduce payload size significantly.
-                # Fields: macaddr, name, commonname, manuf, signal, location, first_time, last_time, phyname
+                # Fields: macaddr, name, commonname, manuf, signal, location, first_time, last_time, phyname, type
                 base_url = f"{KISMET_URL}/devices/views/all/devices.json"
                 fields = [
                     "kismet.device.base.macaddr",
@@ -82,7 +82,8 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
                     "kismet.device.base.location",
                     "kismet.device.base.first_time",
                     "kismet.device.base.last_time",
-                    "kismet.device.base.phyname"
+                    "kismet.device.base.phyname",
+                    "kismet.device.base.type"
                 ]
                 # Join fields with comma
                 field_param = ",".join(fields)

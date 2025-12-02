@@ -1,5 +1,5 @@
 import React from 'react';
-import { Wifi, ShieldAlert, ShieldCheck, Eye, EyeOff, Activity, Bluetooth, Globe, MapPin, Search, Link } from 'lucide-react';
+import { Wifi, ShieldAlert, ShieldCheck, Eye, EyeOff, Activity, Bluetooth, Globe, MapPin, Search, Link, Router } from 'lucide-react';
 import { WifiDevice, ThreatLevel, DeviceType } from '../types';
 
 interface DeviceCardProps {
@@ -29,6 +29,9 @@ export const DeviceCard: React.FC<DeviceCardProps> = ({ device, onToggleIgnore, 
   const renderIcon = () => {
     if (device.type === DeviceType.BLUETOOTH || device.type === DeviceType.BLE) {
       return <Bluetooth size={28} className="text-blue-400" />;
+    }
+    if (device.type === DeviceType.AP) {
+      return <Router size={28} className="text-purple-400" />;
     }
     return <Wifi size={28} />;
   };
@@ -68,6 +71,8 @@ export const DeviceCard: React.FC<DeviceCardProps> = ({ device, onToggleIgnore, 
             <div className="flex items-center gap-2 mt-0.5">
               <p className="text-xs text-slate-300 font-mono bg-slate-900/50 px-1.5 py-0.5 rounded flex-shrink-0">{device.mac}</p>
               {device.type === DeviceType.BLE && <span className="text-xs bg-slate-700 px-1.5 py-0.5 rounded text-slate-200 flex-shrink-0">BLE</span>}
+              {device.type === DeviceType.AP && <span className="text-xs bg-purple-900/50 text-purple-300 px-1.5 py-0.5 rounded flex-shrink-0 font-bold">AP</span>}
+              {device.type === DeviceType.STATION && <span className="text-xs bg-slate-700 px-1.5 py-0.5 rounded text-slate-200 flex-shrink-0">CLIENT</span>}
               <span className={`text-xs px-2 py-0.5 rounded uppercase font-bold flex-shrink-0 ${
                 device.timeWindow === 'recent' ? 'bg-green-900 text-green-300' :
                 device.timeWindow === 'medium' ? 'bg-yellow-900 text-yellow-300' :
