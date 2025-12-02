@@ -5,6 +5,7 @@ import urllib.error
 import json
 import os
 import sys
+import traceback
 
 # Configuration
 PORT = 5000
@@ -85,7 +86,7 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
                      req.add_header('Cookie', f"KISMET={api_key}")
 
                 # 3. Fetch Data
-                with urllib.request.urlopen(req, timeout=5) as response:
+                with urllib.request.urlopen(req, timeout=10) as response:
                     data = response.read()
                     
                 # 3. Forward Data to Web App
@@ -110,6 +111,10 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 except:
                     pass
             except Exception as e:
+                # Log the full error to the console so we know what went wrong
+                print(f"INTERNAL ERROR in /devices: {e}")
+                traceback.print_exc()
+                
                 try:
                     self.send_response(500)
                     self._set_headers()
