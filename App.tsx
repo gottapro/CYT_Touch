@@ -83,7 +83,7 @@ const generateRandomDevice = (currentLat: number, currentLng: number): WifiDevic
 const DEFAULT_SETTINGS: AppSettings = {
   isDemoMode: true,
   dataSourceUrl: 'http://localhost:5000/devices',
-  refreshRate: 5000
+  refreshRate: 2000
 };
 
 const App: React.FC = () => {
@@ -349,7 +349,7 @@ const App: React.FC = () => {
   const fetchLiveData = async () => {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
       // Parallel fetch: Devices + System Stats
       fetchSystemStats();

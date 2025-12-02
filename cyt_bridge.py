@@ -96,7 +96,7 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
                      req.add_header('Cookie', f"KISMET={api_key}")
 
                 # 3. Fetch & Stream Data
-                with urllib.request.urlopen(req, timeout=20) as response:
+                with urllib.request.urlopen(req, timeout=10) as response:
                     self.send_response(200)
                     self._set_headers()
                     # Stream the data in chunks to avoid loading the entire 50MB+ JSON into RAM
