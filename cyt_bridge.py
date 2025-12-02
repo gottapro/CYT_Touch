@@ -86,7 +86,7 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
                      req.add_header('Cookie', f"KISMET={api_key}")
 
                 # 3. Fetch Data
-                with urllib.request.urlopen(req, timeout=10) as response:
+                with urllib.request.urlopen(req, timeout=20) as response:
                     data = response.read()
                     
                 # 3. Forward Data to Web App
