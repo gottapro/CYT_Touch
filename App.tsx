@@ -283,12 +283,15 @@ const App: React.FC = () => {
         }
         
         // B: Raw Kismet Format (Attempt to map common Kismet fields)
+        // Note: When using ?fields=..., Kismet returns objects with the exact keys requested.
         const mac = item['kismet.device.base.macaddr'] || item.macaddr;
         
         if (mac) {
-             const rssi = item['kismet.device.base.signal']?.['kismet.common.signal.last_signal'] 
+             const signalObj = item['kismet.device.base.signal'];
+             const rssi = (signalObj && signalObj['kismet.common.signal.last_signal']) 
                        || item.signal_rssi 
                        || -90;
+             
              const name = item['kismet.device.base.name'] || item['kismet.device.base.commonname'] || item.name;
              const manuf = item['kismet.device.base.manuf'] || item.manuf || 'Unknown';
              
@@ -302,6 +305,10 @@ const App: React.FC = () => {
                  }
              }
 
+             // Time handling
+             const firstSeen = item['kismet.device.base.first_time'] ? item['kismet.device.base.first_time'] * 1000 : Date.now();
+             const lastSeen = item['kismet.device.base.last_time'] ? item['kismet.device.base.last_time'] * 1000 : Date.now();
+
              // Try to extract probes (complex in Kismet, simplified here)
              const probes: string[] = []; 
 
@@ -309,8 +316,8 @@ const App: React.FC = () => {
                  mac: mac,
                  ssid: name,
                  rssi: rssi,
-                 firstSeen: Date.now(), 
-                 lastSeen: Date.now(),
+                 firstSeen: firstSeen, 
+                 lastSeen: lastSeen,
                  vendor: manuf,
                  type: DeviceType.STATION,
                  threatLevel: assessThreatLevel(manuf, name, rssi),

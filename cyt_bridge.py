@@ -70,29 +70,41 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
                         api_key = f.read().strip()
 
                 # 2. Connect to Kismet
-                # We use the 'devices' view to get the list of active devices
-                url = f"{KISMET_URL}/devices/views/all/devices.json"
-                req = urllib.request.Request(url)
+                # OPTIMIZATION: Request only the fields we need to reduce payload size significantly.
+                # Fields: macaddr, name, commonname, manuf, signal, location, first_time, last_time
+                base_url = f"{KISMET_URL}/devices/views/all/devices.json"
+                fields = [
+                    "kismet.device.base.macaddr",
+                    "kismet.device.base.name",
+                    "kismet.device.base.commonname",
+                    "kismet.device.base.manuf",
+                    "kismet.device.base.signal",
+                    "kismet.device.base.location",
+                    "kismet.device.base.first_time",
+                    "kismet.device.base.last_time"
+                ]
+                # Join fields with comma
+                field_param = ",".join(fields)
+                # Construct final URL
+                url = f"{base_url}?fields={field_param}"
                 
-                # Add Auth Header if key exists. 
-                # Kismet usually expects "Cookie: KISMET=..." or standard Basic Auth?
-                # Modern Kismet uses "Cookie" for session or "X-Kismet-Auth" header depending on version.
-                # Standard API token usage often works via Cookie or URI param. 
-                # Let's try the URI param method first as it's robust, or Cookie.
-                # Actually, standard Kismet 2022+ creates an API key that is "KISMET <key>".
-                # The documentation says: send as Cookie "KISMET=<key>"
+                print(f"Fetching: {url}") # Debug log
+                
+                req = urllib.request.Request(url)
                 
                 if api_key:
                      req.add_header('Cookie', f"KISMET={api_key}")
 
-                # 3. Fetch Data
+                # 3. Fetch & Stream Data
                 with urllib.request.urlopen(req, timeout=20) as response:
-                    data = response.read()
-                    
-                # 3. Forward Data to Web App
-                self.send_response(200)
-                self._set_headers()
-                self.wfile.write(data)
+                    self.send_response(200)
+                    self._set_headers()
+                    # Stream the data in chunks to avoid loading the entire 50MB+ JSON into RAM
+                    while True:
+                        chunk = response.read(8192) # 8KB chunks
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
                 
             except (BrokenPipeError, ConnectionResetError):
                 pass
