@@ -138,7 +138,7 @@ export const DeviceCard: React.FC<DeviceCardProps> = ({ device, onToggleIgnore, 
                 <button 
                   key={idx}
                   onClick={() => handleProbeSearch(probe)}
-                  className="px-2.5 py-1 bg-slate-700 hover:bg-cyt-blue hover:text-white rounded text-xs text-slate-200 transition-colors border border-slate-600 truncate max-w-[150px]"
+                  className={`px-2.5 py-1 bg-slate-700 hover:bg-cyt-blue hover:text-white rounded text-xs text-slate-200 transition-colors border border-slate-600 truncate ${device.isTracked ? '' : 'max-w-[150px]'}`}
                   title="Search SSID on Wigle"
                 >
                   {probe}
