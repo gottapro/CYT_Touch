@@ -35,6 +35,7 @@ export interface WifiDevice {
   // Advanced Intelligence
   probedSSIDs: string[]; // List of networks this device is searching for
   gps?: GPSCoordinate;   // Last known GPS location
+  gpsHistory: GPSCoordinate[]; // History of movement for tracking paths
   firstSeenUserPos?: GPSCoordinate; // User's location when device was FIRST seen
   persistenceScore: number; // 0.0 to 1.0 (or 0-100)
   timeWindow: 'recent' | 'medium' | 'old' | 'oldest';

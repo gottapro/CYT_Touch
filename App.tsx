@@ -75,6 +75,7 @@ const generateRandomDevice = (currentLat: number, currentLng: number): WifiDevic
     isTracked: threatLevel === ThreatLevel.HIGH,
     probedSSIDs,
     gps: { lat: currentLat + (Math.random() - 0.5) * 0.001, lng: currentLng + (Math.random() - 0.5) * 0.001 },
+    gpsHistory: [],
     persistenceScore: 0.0,
     timeWindow: 'recent'
   };
@@ -216,8 +217,20 @@ const App: React.FC = () => {
         
         existing.lastSeen = now;
         existing.rssi = reading.rssi;
-        // Only update GPS if the new reading actually HAS data, otherwise keep old
-        if (reading.gps) existing.gps = reading.gps;
+        // Only update GPS if the new reading actually HAS data
+        if (reading.gps) {
+             // Check distance from last recorded point to avoid jitter (threshold: 10 meters)
+             const lastPos = existing.gps;
+             if (lastPos) {
+                 const dist = calculateDistance(lastPos.lat, lastPos.lng, reading.gps.lat, reading.gps.lng);
+                 if (dist > 10) {
+                     existing.gpsHistory = [...(existing.gpsHistory || []), reading.gps];
+                 }
+             } else {
+                 existing.gpsHistory = [reading.gps];
+             }
+             existing.gps = reading.gps;
+        }
         // Fallback: If device has NO gps, and we know OUR user location, tag it with user location (approx)
         if (!existing.gps && userLocation.current.lat !== 0) {
            existing.gps = { ...userLocation.current };
@@ -386,6 +399,7 @@ const App: React.FC = () => {
                  isTracked: false,
                  probedSSIDs: probedSSIDs,
                  gps: gps,
+                 gpsHistory: gps ? [gps] : [],
                  persistenceScore: 0,
                  timeWindow: 'recent'
              } as WifiDevice;
