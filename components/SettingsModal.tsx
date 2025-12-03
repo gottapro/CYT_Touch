@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Save, Server, Zap, Trash2, Database, RefreshCw, Map, Download, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { AppSettings, WifiDevice } from '../types';
 import { downloadKML } from '../services/kmlService';
+import { downloadReport } from '../services/reportService';
 import { isConfigured } from '../services/geminiService';
 
 interface SettingsModalProps {
@@ -131,16 +132,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
             <label className="text-sm uppercase font-bold text-slate-500 tracking-wider flex items-center gap-2">
               <Map size={16} /> Intelligence Export
             </label>
-            <button 
-              onClick={() => downloadKML(devices)}
-              className="w-full p-4 bg-slate-800 border border-slate-600 hover:border-cyt-accent hover:bg-slate-700 rounded-xl flex items-center justify-between group transition-all"
-            >
-              <div className="flex flex-col items-start">
-                <span className="font-bold text-white group-hover:text-cyt-accent transition-colors">Download KML Data</span>
-                <span className="text-xs text-slate-400">Google Earth / GIS Compatible</span>
-              </div>
-              <Download size={20} className="text-slate-400 group-hover:text-cyt-accent" />
-            </button>
+            <div className="grid grid-cols-2 gap-3">
+              <button 
+                onClick={() => downloadKML(devices)}
+                className="p-4 bg-slate-800 border border-slate-600 hover:border-cyt-accent hover:bg-slate-700 rounded-xl flex flex-col items-center justify-center gap-2 group transition-all"
+              >
+                <Download size={24} className="text-slate-400 group-hover:text-cyt-accent" />
+                <div className="text-center">
+                  <span className="font-bold text-white group-hover:text-cyt-accent transition-colors block text-sm">KML Map</span>
+                  <span className="text-[10px] text-slate-400">Google Earth</span>
+                </div>
+              </button>
+              
+              <button 
+                onClick={() => downloadReport(devices)}
+                className="p-4 bg-slate-800 border border-slate-600 hover:border-cyt-accent hover:bg-slate-700 rounded-xl flex flex-col items-center justify-center gap-2 group transition-all"
+              >
+                <Database size={24} className="text-slate-400 group-hover:text-cyt-accent" />
+                <div className="text-center">
+                  <span className="font-bold text-white group-hover:text-cyt-accent transition-colors block text-sm">Report (MD)</span>
+                  <span className="text-[10px] text-slate-400">Markdown Summary</span>
+                </div>
+              </button>
+            </div>
           </div>
 
           {/* Live Data Source */}
