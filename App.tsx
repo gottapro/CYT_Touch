@@ -150,6 +150,23 @@ const App: React.FC = () => {
   }, []);
 
   // --- LOGIC ---
+  
+  // Haversine Formula to calculate distance in meters
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371e3; // metres
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c;
+  };
+
   const calculatePersistence = (firstSeen: number, lastSeen: number): number => {
     const durationMinutes = (lastSeen - firstSeen) / 1000 / 60;
     // Cap at 20 minutes for 100% score
@@ -210,13 +227,35 @@ const App: React.FC = () => {
         existing.persistenceScore = calculatePersistence(existing.firstSeen, now);
         existing.timeWindow = calculateTimeWindow(existing.firstSeen);
         
+        // Preserve origin location if missing
+        if (existing.firstSeenUserPos) {
+             // Keep it
+        } else if (reading.firstSeenUserPos) {
+             existing.firstSeenUserPos = reading.firstSeenUserPos;
+        }
+        
         // --- STALKER LOGIC (Auto-Escalation) ---
-        // If a device is NOT ignored, and stays around for >15 mins (0.75 score), upgrade it to Suspicious/Tracked
-        if (!existing.isIgnored && existing.threatLevel !== ThreatLevel.HIGH && existing.persistenceScore > 0.75) {
-             if (existing.threatLevel !== ThreatLevel.SUSPICIOUS) {
-                 existing.threatLevel = ThreatLevel.SUSPICIOUS;
-                 existing.isTracked = true; // Auto-Chase
-                 existing.notes = "Auto-Flagged: High Persistence (Stalker Logic)";
+        // Rule: Device must persist > 15 mins AND User must have moved > 500 meters
+        if (!existing.isIgnored && existing.threatLevel !== ThreatLevel.HIGH) {
+             
+             const isPersistent = existing.persistenceScore > 0.75; // >15 mins
+             
+             // Calculate movement since we first saw this device
+             let distanceTraveled = 0;
+             if (existing.firstSeenUserPos && userLocation.current.lat !== 0) {
+                  distanceTraveled = calculateDistance(
+                      existing.firstSeenUserPos.lat, existing.firstSeenUserPos.lng,
+                      userLocation.current.lat, userLocation.current.lng
+                  );
+             }
+
+             // Trigger if Persistent AND followed us > 500 meters
+             if (isPersistent && distanceTraveled > 500) {
+                 if (existing.threatLevel !== ThreatLevel.SUSPICIOUS) {
+                     existing.threatLevel = ThreatLevel.SUSPICIOUS;
+                     existing.isTracked = true; // Auto-Chase
+                     existing.notes = `Auto-Flagged: Followed for ${(distanceTraveled/1000).toFixed(1)}km`;
+                 }
              }
         }
 
@@ -224,12 +263,17 @@ const App: React.FC = () => {
         map.set(reading.mac, existing);
       } else {
         // New Device Detected
-        // Ensure we are working with a copy or new object (reading is already new from parseBackendData but let's be safe if we mutate it)
+        // Ensure we are working with a copy or new object
         currentDevice = { ...reading };
         
         // If device has no GPS from Kismet, use our browser location
         if (!currentDevice.gps && userLocation.current.lat !== 0) {
             currentDevice.gps = { ...userLocation.current };
+        }
+        
+        // Capture USER location at time of first contact (Crucial for Stalker Logic)
+        if (!currentDevice.firstSeenUserPos && userLocation.current.lat !== 0) {
+            currentDevice.firstSeenUserPos = { ...userLocation.current };
         }
 
         // Fingerprint Check
