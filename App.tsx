@@ -326,8 +326,8 @@ const App: React.FC = () => {
                 type = DeviceType.AP; // Treat bridged devices as infrastructure
              }
 
-             // Try to extract probes (complex in Kismet, simplified here)
-             const probes: string[] = []; 
+             // Extract probed SSIDs
+             const probedSSIDs: string[] = item['kismet.device.base.probed_ssid'] || [];
 
              return {
                  mac: mac,
@@ -340,7 +340,7 @@ const App: React.FC = () => {
                  threatLevel: assessThreatLevel(manuf, name, rssi),
                  isIgnored: false,
                  isTracked: false,
-                 probedSSIDs: probes,
+                 probedSSIDs: probedSSIDs,
                  gps: gps,
                  persistenceScore: 0,
                  timeWindow: 'recent'

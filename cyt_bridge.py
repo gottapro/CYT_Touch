@@ -83,7 +83,8 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
                     "kismet.device.base.first_time",
                     "kismet.device.base.last_time",
                     "kismet.device.base.phyname",
-                    "kismet.device.base.type"
+                    "kismet.device.base.type",
+                    "kismet.device.base.probed_ssid"
                 ]
                 # Join fields with comma
                 field_param = ",".join(fields)
