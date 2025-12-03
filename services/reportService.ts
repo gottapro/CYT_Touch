@@ -39,7 +39,7 @@ export const generateMarkdownReport = (devices: WifiDevice[]): string => {
   // Detailed Sections
   targets.forEach((d, index) => {
     md += `### ${index + 1}. ${d.ssid || d.mac} (${d.vendor || 'Unknown'})
-- **MAC:** lexible{d.mac}lexible{`
+- **MAC:** \`${d.mac}\`
 - **Type:** ${d.type}
 - **Threat Level:** ${d.threatLevel}
 - **Persistence Score:** ${Math.round(d.persistenceScore * 100)}%
