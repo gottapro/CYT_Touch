@@ -83,14 +83,17 @@ const generateRandomDevice = (currentLat: number, currentLng: number): WifiDevic
 const DEFAULT_SETTINGS: AppSettings = {
   isDemoMode: true,
   dataSourceUrl: 'http://localhost:5000/devices',
-  refreshRate: 2000
+  refreshRate: 8000
 };
 
 const App: React.FC = () => {
   // --- STATE ---
   const [settings, setSettings] = useState<AppSettings>(() => {
     const saved = localStorage.getItem('cyt_settings');
-    return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+    // Force update refreshRate if it's the old default to ensure users get the new stability fix
+    const parsed = saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+    if (parsed.refreshRate < 5000) parsed.refreshRate = 8000;
+    return parsed;
   });
 
   const [isScanning, setIsScanning] = useState(false);
@@ -363,7 +366,7 @@ const App: React.FC = () => {
   const fetchLiveData = async () => {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
 
       // Parallel fetch: Devices + System Stats
       fetchSystemStats();
