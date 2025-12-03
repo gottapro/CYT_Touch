@@ -30,6 +30,12 @@ export const analyzeDeviceSignature = async (device: WifiDevice): Promise<Analys
       - Signal (RSSI): ${device.rssi} dBm
       - Type: ${device.type}
       - Persistence: ${Math.round(device.persistenceScore * 100)}%
+      - Probed SSIDs (Networks this device is searching for): ${device.probedSSIDs.length > 0 ? device.probedSSIDs.join(', ') : 'None captured'}
+      
+      Task:
+      1. Analyze the Vendor and SSID for known threat signatures (e.g., Flipper Zero, Drones, Cameras).
+      2. Analyze the 'Probed SSIDs' list. Does it reveal the device's home network, corporate affiliation, or aggressive scanning behavior?
+      3. Determine if this device pattern suggests a normal user, a stalker/follower, or a surveillance device.
       
       Is this device likely a normal household device, a security camera, a drone, or a random passerby?
       Provide a brief summary, a threat score (0-100), and a recommendation (Ignore, Monitor, or Chase).
