@@ -15,10 +15,10 @@ export const AnalysisModal: React.FC<AnalysisModalProps> = ({ isOpen, onClose, r
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
+      <div className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         
         {/* Header */}
-        <div className="p-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
+        <div className="p-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center flex-none">
           <div className="flex items-center gap-2 text-cyt-accent">
             <Bot size={24} />
             <h2 className="text-xl font-bold">AI Signal Analysis</h2>
@@ -29,7 +29,7 @@ export const AnalysisModal: React.FC<AnalysisModalProps> = ({ isOpen, onClose, r
         </div>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-8 space-y-4">
               <div className="w-12 h-12 border-4 border-cyt-blue border-t-transparent rounded-full animate-spin"></div>
@@ -66,7 +66,7 @@ export const AnalysisModal: React.FC<AnalysisModalProps> = ({ isOpen, onClose, r
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-slate-800/50 border-t border-slate-700">
+        <div className="p-4 bg-slate-800/50 border-t border-slate-700 flex-none">
           <button onClick={onClose} className="w-full py-3 bg-cyt-blue hover:bg-blue-600 text-white font-bold rounded-xl transition-colors">
             Close
           </button>
