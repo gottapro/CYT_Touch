@@ -384,7 +384,10 @@ const App: React.FC = () => {
              }
 
              // Extract probed SSIDs
-             const probedSSIDs: string[] = item['kismet.device.base.probed_ssid'] || [];
+             const probedSSIDsRaw = item['kismet.device.base.probed_ssid'] || [];
+             const probedSSIDs: string[] = probedSSIDsRaw
+               .map((probe: any) => probe['kismet.common.probed.ssid'])
+               .filter((ssid: string) => ssid && ssid.length > 0);
 
              return {
                  mac: mac,
