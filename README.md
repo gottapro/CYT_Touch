@@ -18,6 +18,11 @@ CYT Touch is a professional-grade, touch-optimized interface for real-time wirel
 *   **Movement Correlation:** Elevates threats to **"Chasing"** status *only* if they follow you across significant distances (>500m), filtering out stationary neighbors.
 *   **GPS History:** Records a breadcrumb trail of coordinates for every device to visualize its movement path relative to yours.
 
+### 🚨 Red Alert Proximity Warning
+*   **Immediate Threat Detection:** Triggers a **full-screen, pulsing red overlay** when a known "High Threat" device (e.g., Flipper Zero, WiFi Pineapple) comes within close proximity (Signal > -65dBm).
+*   **Haptic Feedback:** Vibrates mobile devices to alert you even if the screen is not in focus.
+*   **Tactical Options:** One-tap "ENGAGE" button to immediately lock tracking on the target.
+
 ### 🤖 AI-Powered Analysis
 *   **Deep Profiling:** Integrates **Google Gemini AI** to analyze device signatures.
 *   **Probe Analysis:** Feeds the AI a list of **Probed SSIDs** (networks a device is searching for) to detect "Home Base" networks, corporate affiliations, or aggressive surveillance tools.
@@ -86,11 +91,12 @@ Use the included launcher script to start the Python Bridge (Port 5000) and Web 
 ### 2. The Workflow ("The Hunt")
 1.  **Sanitize:** Tap **TAIL** (Shield Icon) on known friendly devices (your phone, home router) to ignore them.
 2.  **Scan:** Watch the **"Nearby"** list. Devices probing for networks will reveal their intentions.
-3.  **Move:** As you travel, the **Smart Logic** will monitor for persistent signals.
+3.  **Red Alert!** If a **High Threat** device comes into close proximity (-65dBm), a full-screen Red Alert will trigger. Respond by Tapping "ENGAGE" to track or "DISMISS".
+4.  **Move:** As you travel, the **Smart Logic** will monitor for persistent signals.
     *   **Yellow Border:** Device is lingering (>15 mins).
     *   **Red Border/Eye Icon:** Device is **Chasing** (lingering + moving >500m with you).
-4.  **Analyze:** Tap the **Activity Pulse** icon on a suspicious device to run an AI threat assessment.
-5.  **Export:** 
+5.  **Analyze:** Tap the **Activity Pulse** icon on a suspicious device to run an AI threat assessment.
+6.  **Export:** 
     *   Go to **Settings**.
     *   Tap **Download KML Map** for Google Earth analysis.
     *   Tap **Report (MD)** for a text summary.
