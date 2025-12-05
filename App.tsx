@@ -324,93 +324,115 @@ const App: React.FC = () => {
   }, []);
 
   // Helper to parse diverse JSON formats (Native App format OR Kismet Raw format)
-  const parseBackendData = (data: any): WifiDevice[] => {
-    let list: any[] = [];
-    
-    // Case 1: Array (Our format or List of Kismet Objects)
-    if (Array.isArray(data)) {
-        list = data;
-    } 
-    // Case 2: Kismet Object wrapper
-    else if (data && Array.isArray(data.devices)) {
-        list = data.devices;
+// Replace the parseBackendData function in App.tsx with this fixed version
+
+const parseBackendData = (data: any): WifiDevice[] => {
+  let list: any[] = [];
+
+  // Case 1: Array (Our format or List of Kismet Objects)
+  if (Array.isArray(data)) {
+    list = data;
+  }
+  // Case 2: Kismet Object wrapper
+  else if (data && Array.isArray(data.devices)) {
+    list = data.devices;
+  }
+
+  return list.map((item: any) => {
+    // A: Native App Format
+    if (item.mac && typeof item.rssi === 'number') {
+      return item as WifiDevice;
     }
 
-    return list.map((item: any) => {
-        // A: Native App Format
-        if (item.mac && typeof item.rssi === 'number') {
-            return item as WifiDevice;
+    // B: Raw Kismet Format
+    const mac = item['kismet.device.base.macaddr'] || item.macaddr;
+
+    if (mac) {
+      const signalObj = item['kismet.device.base.signal'];
+      const rssi = (signalObj && signalObj['kismet.common.signal.last_signal'])
+                || item.signal_rssi
+                || -90;
+
+      const name = item['kismet.device.base.name'] || item['kismet.device.base.commonname'] || item.name;
+      const manuf = item['kismet.device.base.manuf'] || item.manuf || 'Unknown';
+
+      // Extract GPS from Kismet if available (Avg Loc)
+      let gps: GPSCoordinate | undefined = undefined;
+      const loc = item['kismet.device.base.location'];
+      if (loc && loc['kismet.common.location.avg_loc'] && loc['kismet.common.location.avg_loc']['kismet.common.location.geopoint']) {
+        const point = loc['kismet.common.location.avg_loc']['kismet.common.location.geopoint']; // [lon, lat]
+        if (Array.isArray(point) && point.length === 2 && point[0] !== 0) {
+          gps = { lng: point[0], lat: point[1] };
         }
+      }
+
+      // Time handling
+      const firstSeen = item['kismet.device.base.first_time'] ? item['kismet.device.base.first_time'] * 1000 : Date.now();
+      const lastSeen = item['kismet.device.base.last_time'] ? item['kismet.device.base.last_time'] * 1000 : Date.now();
+
+      // PHY Type Detection
+      const phy = item['kismet.device.base.phyname'] || 'IEEE802.11';
+      const kismetType = item['kismet.device.base.type'] || '';
+
+      let type = DeviceType.STATION; // Default to Client/Station
+      if (phy.includes('Bluetooth')) {
+        type = phy.includes('LE') ? DeviceType.BLE : DeviceType.BLUETOOTH;
+      } else if (kismetType === 'Wi-Fi AP') {
+        type = DeviceType.AP;
+      } else if (kismetType === 'Wi-Fi Bridged') {
+        type = DeviceType.AP; // Treat bridged devices as infrastructure
+      }
+
+      // ========== FIX: Extract probed SSIDs from dot11.device ==========
+      let probedSSIDs: string[] = [];
+      
+      // Check if dot11.device exists and contains probed_ssid_map
+      const dot11Device = item['dot11.device'];
+      if (dot11Device && dot11Device['dot11.device.probed_ssid_map']) {
+        const probeMap = dot11Device['dot11.device.probed_ssid_map'];
         
-        // B: Raw Kismet Format (Attempt to map common Kismet fields)
-        // Note: When using ?fields=..., Kismet returns objects with the exact keys requested.
-        const mac = item['kismet.device.base.macaddr'] || item.macaddr;
-        
-        if (mac) {
-             const signalObj = item['kismet.device.base.signal'];
-             const rssi = (signalObj && signalObj['kismet.common.signal.last_signal']) 
-                       || item.signal_rssi 
-                       || -90;
-             
-             const name = item['kismet.device.base.name'] || item['kismet.device.base.commonname'] || item.name;
-             const manuf = item['kismet.device.base.manuf'] || item.manuf || 'Unknown';
-             
-             // Extract GPS from Kismet if available (Avg Loc)
-             let gps: GPSCoordinate | undefined = undefined;
-             const loc = item['kismet.device.base.location'];
-             if (loc && loc['kismet.common.location.avg_loc'] && loc['kismet.common.location.avg_loc']['kismet.common.location.geopoint']) {
-                 const point = loc['kismet.common.location.avg_loc']['kismet.common.location.geopoint']; // [lon, lat]
-                 if (Array.isArray(point) && point.length === 2 && point[0] !== 0) {
-                     gps = { lng: point[0], lat: point[1] };
-                 }
-             }
-
-             // Time handling
-             const firstSeen = item['kismet.device.base.first_time'] ? item['kismet.device.base.first_time'] * 1000 : Date.now();
-             const lastSeen = item['kismet.device.base.last_time'] ? item['kismet.device.base.last_time'] * 1000 : Date.now();
-             
-             // PHY Type Detection
-             const phy = item['kismet.device.base.phyname'] || 'IEEE802.11';
-             const kismetType = item['kismet.device.base.type'] || '';
-             
-             let type = DeviceType.STATION; // Default to Client/Station
-             
-             if (phy.includes('Bluetooth')) {
-                type = phy.includes('LE') ? DeviceType.BLE : DeviceType.BLUETOOTH;
-             } else if (kismetType === 'Wi-Fi AP') {
-                type = DeviceType.AP;
-             } else if (kismetType === 'Wi-Fi Bridged') {
-                type = DeviceType.AP; // Treat bridged devices as infrastructure
-             }
-
-             // Extract probed SSIDs
-             const probedSSIDsRaw = item['kismet.device.base.probed_ssid'] || [];
-             const probedSSIDs: string[] = probedSSIDsRaw
-               .map((probe: any) => probe['kismet.common.probed.ssid'])
-               .filter((ssid: string) => ssid && ssid.length > 0);
-
-             return {
-                 mac: mac,
-                 ssid: name,
-                 rssi: rssi,
-                 firstSeen: firstSeen, 
-                 lastSeen: lastSeen,
-                 vendor: manuf,
-                 type: type,
-                 threatLevel: assessThreatLevel(manuf, name, rssi),
-                 isIgnored: false,
-                 isTracked: false,
-                 probedSSIDs: probedSSIDs,
-                 gps: gps,
-                 gpsHistory: gps ? [gps] : [],
-                 persistenceScore: 0,
-                 timeWindow: 'recent'
-             } as WifiDevice;
+        if (Array.isArray(probeMap)) {
+          probedSSIDs = probeMap
+            .map((probe: any) => {
+              // Extract the SSID from the probe object
+              const ssid = probe['dot11.probedssid.ssid'];
+              return ssid;
+            })
+            .filter((ssid: string | null | undefined) => {
+              // Filter out empty/null SSIDs
+              return ssid && ssid.length > 0;
+            });
         }
+      }
+      
+      // Debug log for devices with probes (remove after confirming it works)
+      if (probedSSIDs.length > 0) {
+        console.log(`Device ${mac} probed SSIDs:`, probedSSIDs);
+      }
+      // ================================================================
 
-        return null;
-    }).filter((d): d is WifiDevice => d !== null);
-  };
+      return {
+        mac: mac,
+        ssid: name,
+        rssi: rssi,
+        firstSeen: firstSeen,
+        lastSeen: lastSeen,
+        vendor: manuf,
+        type: type,
+        threatLevel: assessThreatLevel(manuf, name, rssi),
+        isIgnored: false,
+        isTracked: false,
+        probedSSIDs: probedSSIDs,
+        gps: gps,
+        gpsHistory: gps ? [gps] : [],
+        persistenceScore: 0,
+        timeWindow: 'recent'
+      } as WifiDevice;
+    }
+
+    return null;
+  }).filter((d): d is WifiDevice => d !== null);
+};
 
   const fetchSystemStats = async () => {
      try {

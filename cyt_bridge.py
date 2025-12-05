@@ -16,10 +16,9 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
     A Bridge Server to proxy requests from the React Web App to Kismet.
     This solves the CORS (Cross-Origin) security blocks browsers enforce.
     """
-    
     def _set_headers(self, content_type='application/json'):
         self.send_header('Content-type', content_type)
-        self.send_header('Access-Control-Allow-Origin', '*') # Allow the Web App to connect
+        self.send_header('Access-Control-Allow-Origin', '*')  # Allow the Web App to connect
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
@@ -33,7 +32,6 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
         """Read the Raspberry Pi CPU temperature."""
         if sys.platform != "linux":
             return 0.0
-            
         try:
             with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
                 temp_str = f.read().strip()
@@ -44,7 +42,6 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         """Handle GET requests for data."""
-        
         # Endpoint: System Health (CPU Temp)
         if self.path == '/system':
             try:
@@ -71,7 +68,7 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
 
                 # 2. Connect to Kismet
                 # OPTIMIZATION: Request only the fields we need to reduce payload size significantly.
-                # Fields: macaddr, name, commonname, manuf, signal, location, first_time, last_time, phyname, type
+                # CRITICAL FIX: Added dot11.device to get probed SSIDs
                 base_url = f"{KISMET_URL}/devices/views/all/devices.json"
                 fields = [
                     "kismet.device.base.macaddr",
@@ -84,19 +81,19 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
                     "kismet.device.base.last_time",
                     "kismet.device.base.phyname",
                     "kismet.device.base.type",
-                    "kismet.device.base.probed_ssid"
+                    "dot11.device"  # THIS IS THE FIX - contains probed_ssid_map
                 ]
+
                 # Join fields with comma
                 field_param = ",".join(fields)
+
                 # Construct final URL
                 url = f"{base_url}?fields={field_param}"
-                
-                print(f"Fetching: {url}") # Debug log
-                
+                print(f"Fetching: {url}")  # Debug log
+
                 req = urllib.request.Request(url)
-                
                 if api_key:
-                     req.add_header('Cookie', f"KISMET={api_key}")
+                    req.add_header('Cookie', f"KISMET={api_key}")
 
                 # 3. Fetch & Stream Data
                 with urllib.request.urlopen(req, timeout=25) as response:
@@ -104,11 +101,11 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
                     self._set_headers()
                     # Stream the data in chunks to avoid loading the entire 50MB+ JSON into RAM
                     while True:
-                        chunk = response.read(8192) # 8KB chunks
+                        chunk = response.read(8192)  # 8KB chunks
                         if not chunk:
                             break
                         self.wfile.write(chunk)
-                
+
             except (BrokenPipeError, ConnectionResetError):
                 pass
             except urllib.error.URLError as e:
@@ -118,7 +115,7 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
                     self.send_response(502)
                     self._set_headers()
                     error_msg = {
-                        'error': 'Could not connect to Kismet', 
+                        'error': 'Could not connect to Kismet',
                         'details': str(e),
                         'suggestion': 'Ensure Kismet is running (systemctl start kismet)'
                     }
@@ -129,7 +126,6 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 # Log the full error to the console so we know what went wrong
                 print(f"INTERNAL ERROR in /devices: {e}")
                 traceback.print_exc()
-                
                 try:
                     self.send_response(500)
                     self._set_headers()
@@ -137,22 +133,20 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 except:
                     pass
             return
-        
+
         # Default: Not Found
         self.send_response(404)
         self.end_headers()
 
     def do_POST(self):
         """Handle POST requests for commands."""
-        
         # Endpoint: Purge/Reset
         if self.path == '/purge':
             print("Command received: Purge Kismet Data")
             # NOTE: Actual purging requires system permissions or Kismet API calls.
             # For now, we return success to the UI.
             # You could uncomment the line below if you have a cleanup script:
-            # os.system("./clean_kismet.sh") 
-            
+            # os.system("./clean_kismet.sh")
             try:
                 self.send_response(200)
                 self._set_headers()
@@ -160,14 +154,13 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
             except (BrokenPipeError, ConnectionResetError):
                 pass
             return
-            
+
         self.send_response(404)
         self.end_headers()
 
 if __name__ == "__main__":
     # Allow the port to be reused immediately after restart
     socketserver.ThreadingTCPServer.allow_reuse_address = True
-    
     with socketserver.ThreadingTCPServer(("", PORT), CytBridgeHandler) as httpd:
         print("------------------------------------------------")
         print(f" CYT Bridge Server Running on Port {PORT}")
