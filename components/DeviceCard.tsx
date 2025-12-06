@@ -7,9 +7,10 @@ interface DeviceCardProps {
   onToggleIgnore: (mac: string) => void;
   onToggleTrack: (mac: string) => void;
   onAnalyze: (device: WifiDevice) => void;
+  isAnalyzing?: boolean;
 }
 
-export const DeviceCard = React.memo<DeviceCardProps>(({ device, onToggleIgnore, onToggleTrack, onAnalyze }) => {
+export const DeviceCard = React.memo<DeviceCardProps>(({ device, onToggleIgnore, onToggleTrack, onAnalyze, isAnalyzing }) => {
   
   const getSignalColor = (rssi: number) => {
     if (rssi > -50) return 'text-green-400';
@@ -189,10 +190,11 @@ export const DeviceCard = React.memo<DeviceCardProps>(({ device, onToggleIgnore,
 
         <button 
           onClick={() => onAnalyze(device)}
-          className="flex-none w-14 flex items-center justify-center bg-cyt-blue/20 text-cyt-blue rounded-xl border border-cyt-blue/50 active:bg-cyt-blue/40"
+          disabled={isAnalyzing}
+          className={`flex-none w-14 flex items-center justify-center bg-cyt-blue/20 text-cyt-blue rounded-xl border border-cyt-blue/50 active:bg-cyt-blue/40 ${isAnalyzing ? 'opacity-50 cursor-not-allowed' : ''}`}
           aria-label="Analyze"
         >
-          <Activity size={24} />
+          <Activity size={24} className={isAnalyzing ? "animate-pulse" : ""} />
         </button>
       </div>
     </div>
