@@ -9,7 +9,7 @@ interface DeviceCardProps {
   onAnalyze: (device: WifiDevice) => void;
 }
 
-export const DeviceCard: React.FC<DeviceCardProps> = ({ device, onToggleIgnore, onToggleTrack, onAnalyze }) => {
+export const DeviceCard = React.memo<DeviceCardProps>(({ device, onToggleIgnore, onToggleTrack, onAnalyze }) => {
   
   const getSignalColor = (rssi: number) => {
     if (rssi > -50) return 'text-green-400';
@@ -197,4 +197,4 @@ export const DeviceCard: React.FC<DeviceCardProps> = ({ device, onToggleIgnore, 
       </div>
     </div>
   );
-};
+});
