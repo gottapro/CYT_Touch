@@ -59,6 +59,14 @@ CYT Touch is a professional-grade, touch-optimized interface for real-time wirel
     # Ensure Kismet is configured and running
     sudo systemctl enable --now kismet
     ```
+    
+    **Note:** For the **"Purge Kismet DB"** feature to work, the user running the app must be able to run `sudo systemctl` commands without a password. 
+    To configure this:
+    ```bash
+    sudo visudo
+    # Add the following line at the end (replace 'pi' with your username):
+    pi ALL=(ALL) NOPASSWD: /usr/bin/systemctl start kismet, /usr/bin/systemctl stop kismet
+    ```
 
 2.  **Clone Repository**
     ```bash
@@ -96,10 +104,12 @@ Use the included launcher script to start the Python Bridge (Port 5000) and Web 
     *   **Yellow Border:** Device is lingering (>15 mins).
     *   **Red Border/Eye Icon:** Device is **Chasing** (lingering + moving >500m with you).
 5.  **Analyze:** Tap the **Activity Pulse** icon on a suspicious device to run an AI threat assessment.
-6.  **Export:** 
+5.  **Export:** 
     *   Go to **Settings**.
     *   Tap **Download KML Map** for Google Earth analysis.
     *   Tap **Report (MD)** for a text summary.
+6.  **Reset:**
+    *   Use **Purge Kismet DB** in Settings to wipe the underlying database and restart the Kismet service. This is recommended when moving to a completely new physical location to ensure your "Stalker Logic" starts fresh.
 
 ---
 
