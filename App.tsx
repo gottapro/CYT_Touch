@@ -7,6 +7,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { HelpModal } from './components/HelpModal';
 import { RedAlert } from './components/RedAlert';
 import { analyzeDeviceSignature } from './services/geminiService';
+import { DeviceSearch } from './components/DeviceSearch';
 
 const isDev = import.meta.env.DEV;
 
@@ -109,6 +110,7 @@ const App: React.FC = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [devices, setDevices] = useState<WifiDevice[]>([]);
   const [filter, setFilter] = useState<'all' | 'tracked' | 'ignored'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'error' | 'idle'>('idle');
   const [cpuTemp, setCpuTemp] = useState<number | null>(null);
   
@@ -575,10 +577,30 @@ const parseBackendData = (data: any): WifiDevice[] => {
   };
 
   const visibleDevices = devices.filter(d => {
-    if (filter === 'ignored') return d.isIgnored;
-    if (filter === 'tracked') return d.isTracked;
-    return !d.isIgnored;
-  });
+  // Apply tab filter first
+  if (filter === 'ignored') {
+    if (!d.isIgnored) return false;
+  } else if (filter === 'tracked') {
+    if (!d.isTracked) return false;
+  } else {
+    if (d.isIgnored) return false;
+  }
+
+  // Apply search filter if search term exists
+  if (searchTerm) {
+    const term = searchTerm.toLowerCase();
+    const matchesMac = d.mac.toLowerCase().includes(term);
+    const matchesSsid = d.ssid?.toLowerCase().includes(term);
+    const matchesVendor = d.vendor?.toLowerCase().includes(term);
+    const matchesProbes = d.probedSSIDs.some(ssid => 
+      ssid.toLowerCase().includes(term)
+    );
+    
+    return matchesMac || matchesSsid || matchesVendor || matchesProbes;
+  }
+
+  return true;
+});
 
   return (
     <div className="min-h-screen bg-gray-900 text-slate-200 pb-28 font-sans selection:bg-cyt-accent selection:text-black">
@@ -643,31 +665,44 @@ const parseBackendData = (data: any): WifiDevice[] => {
       {/* --- MAIN CONTENT --- */}
       <main className="pt-24 px-4 max-w-3xl mx-auto">
         
-        {/* Filter Tabs */}
-        <div className="flex p-1 bg-slate-800 rounded-xl mb-4 border border-slate-700 sticky top-20 z-30 shadow-lg">
-          <button 
-            onClick={() => setFilter('all')}
-            className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${filter === 'all' ? 'bg-slate-600 text-white shadow ring-1 ring-slate-500' : 'text-slate-400 hover:text-slate-200'}`}
-          >
-            Nearby ({devices.filter(d => !d.isIgnored).length})
-          </button>
-          <button 
-            onClick={() => setFilter('tracked')}
-            className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${filter === 'tracked' ? 'bg-cyt-red text-white shadow ring-1 ring-red-400' : 'text-slate-400 hover:text-slate-200'}`}
-          >
-            Chasing ({devices.filter(d => d.isTracked).length})
-          </button>
-          <button 
-            onClick={() => setFilter('ignored')}
-            className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${filter === 'ignored' ? 'bg-slate-600 text-white shadow ring-1 ring-slate-500' : 'text-slate-400 hover:text-slate-200'}`}
-          >
-            Tail ({devices.filter(d => d.isIgnored).length})
-          </button>
-        </div>
-
-        {/* Device List */}
-        <div className="space-y-3 min-h-[50vh]">
-          {visibleDevices.length === 0 ? (
+                {/* Filter Tabs */}
+                <div className="flex p-1 bg-slate-800 rounded-xl mb-4 border border-slate-700 sticky top-20 z-30 shadow-lg">
+                  <button 
+                    onClick={() => setFilter('all')}
+                    className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${filter === 'all' ? 'bg-slate-600 text-white shadow ring-1 ring-slate-500' : 'text-slate-400 hover:text-slate-200'}`}
+                  >
+                    Nearby ({devices.filter(d => !d.isIgnored).length})
+                  </button>
+                  <button 
+                    onClick={() => setFilter('tracked')}
+                    className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${filter === 'tracked' ? 'bg-cyt-red text-white shadow ring-1 ring-red-400' : 'text-slate-400 hover:text-slate-200'}`}
+                  >
+                    Chasing ({devices.filter(d => d.isTracked).length})
+                  </button>
+                  <button 
+                    onClick={() => setFilter('ignored')}
+                    className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${filter === 'ignored' ? 'bg-slate-600 text-white shadow ring-1 ring-slate-500' : 'text-slate-400 hover:text-slate-200'}`}
+                  >
+                    Tail ({devices.filter(d => d.isIgnored).length})
+                  </button>
+                </div>
+        
+                {/* NEW: Search Bar */}
+                <div className="mb-4">
+                  <DeviceSearch 
+                    value={searchTerm}
+                    onChange={setSearchTerm}
+                    totalDevices={devices.filter(d => {
+                      if (filter === 'ignored') return d.isIgnored;
+                      if (filter === 'tracked') return d.isTracked;
+                      return !d.isIgnored;
+                    }).length}
+                    filteredCount={visibleDevices.length}
+                  />
+                </div>
+        
+                {/* Device List */}
+                <div className="space-y-3 min-h-[50vh]">          {visibleDevices.length === 0 ? (
              <div className="flex flex-col items-center justify-center py-20 text-slate-500 opacity-60">
                 <Search size={48} className="mb-4" />
                 <p className="text-lg">No devices visible</p>
