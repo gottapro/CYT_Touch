@@ -8,6 +8,15 @@ import { HelpModal } from './components/HelpModal';
 import { RedAlert } from './components/RedAlert';
 import { analyzeDeviceSignature } from './services/geminiService';
 
+const isDev = import.meta.env.DEV;
+
+const logger = {
+  debug: (...args: any[]) => isDev && console.log('[DEBUG]', ...args),
+  info: (...args: any[]) => console.log('[INFO]', ...args),
+  warn: (...args: any[]) => console.warn('[WARN]', ...args),
+  error: (...args: any[]) => console.error('[ERROR]', ...args)
+};
+
 // --- CONFIGURATION & HEURISTICS ---
 
 const KNOWN_THREAT_VENDORS = [
@@ -201,127 +210,115 @@ const App: React.FC = () => {
     return null;
   };
 
-  const updateDevices = useCallback((prevDevices: WifiDevice[], newReadings: WifiDevice[]) => {
-    const now = Date.now();
-    const map = new Map(prevDevices.map(d => [d.mac, d]));
-    
-    // Process new readings
-    newReadings.forEach(reading => {
-      let isNew = !map.has(reading.mac);
-      let currentDevice = reading;
+const updateDevices = useCallback((prevDevices: WifiDevice[], newReadings: WifiDevice[]) => {
+  const now = Date.now();
+  const map = new Map(prevDevices.map(d => [d.mac, d]));
+  
+  // Get current user location at time of update
+  const currentUserLocation = userLocation.current;
 
-      if (!isNew) {
-        // Update existing - Create a copy to avoid mutation
-        const existingOriginal = map.get(reading.mac)!;
-        const existing = { ...existingOriginal };
-        
-        existing.lastSeen = now;
-        existing.rssi = reading.rssi;
-        // Only update GPS if the new reading actually HAS data
-        if (reading.gps) {
-             // Check distance from last recorded point to avoid jitter (threshold: 10 meters)
-             const lastPos = existing.gps;
-             if (lastPos) {
-                 const dist = calculateDistance(lastPos.lat, lastPos.lng, reading.gps.lat, reading.gps.lng);
-                 if (dist > 10) {
-                     existing.gpsHistory = [...(existing.gpsHistory || []), reading.gps];
-                 }
-             } else {
-                 existing.gpsHistory = [reading.gps];
-             }
-             existing.gps = reading.gps;
-        }
-        // Fallback: If device has NO gps, and we know OUR user location, tag it with user location (approx)
-        if (!existing.gps && userLocation.current.lat !== 0) {
-           existing.gps = { ...userLocation.current };
-        }
+  // Process new readings
+  newReadings.forEach(reading => {
+    let isNew = !map.has(reading.mac);
+    let currentDevice = reading;
 
-        existing.probedSSIDs = [...new Set([...existing.probedSSIDs, ...reading.probedSSIDs])]; // Merge probes
-        existing.persistenceScore = calculatePersistence(existing.firstSeen, now);
-        existing.timeWindow = calculateTimeWindow(existing.firstSeen);
-        
-        // Preserve origin location if missing
-        if (existing.firstSeenUserPos) {
-             // Keep it
-        } else if (reading.firstSeenUserPos) {
-             existing.firstSeenUserPos = reading.firstSeenUserPos;
-        }
-        
-        // --- STALKER LOGIC (Auto-Escalation) ---
-        // Rule: Device must persist > 15 mins AND User must have moved > 500 meters
-        if (!existing.isIgnored && existing.threatLevel !== ThreatLevel.HIGH) {
-             
-             const isPersistent = existing.persistenceScore > 0.75; // >15 mins
-             
-             // Calculate movement since we first saw this device
-             let distanceTraveled = 0;
-             if (existing.firstSeenUserPos && userLocation.current.lat !== 0) {
-                  distanceTraveled = calculateDistance(
-                      existing.firstSeenUserPos.lat, existing.firstSeenUserPos.lng,
-                      userLocation.current.lat, userLocation.current.lng
-                  );
-             }
+    if (!isNew) {
+      const existingOriginal = map.get(reading.mac)!;
+      const existing = { ...existingOriginal };
 
-             // Trigger if Persistent AND followed us > 500 meters
-             if (isPersistent && distanceTraveled > 500) {
-                 if (existing.threatLevel !== ThreatLevel.SUSPICIOUS) {
-                     existing.threatLevel = ThreatLevel.SUSPICIOUS;
-                     existing.isTracked = true; // Auto-Chase
-                     existing.notes = `Auto-Flagged: Followed for ${(distanceTraveled/1000).toFixed(1)}km`;
-                 }
-             }
-        }
+      existing.lastSeen = now;
+      existing.rssi = reading.rssi;
 
-        currentDevice = existing;
-        map.set(reading.mac, existing);
-      } else {
-        // New Device Detected
-        // Ensure we are working with a copy or new object
-        currentDevice = { ...reading };
-        
-        // If device has no GPS from Kismet, use our browser location
-        if (!currentDevice.gps && userLocation.current.lat !== 0) {
-            currentDevice.gps = { ...userLocation.current };
+      if (reading.gps) {
+        const lastPos = existing.gps;
+        if (lastPos) {
+          const dist = calculateDistance(lastPos.lat, lastPos.lng, reading.gps.lat, reading.gps.lng);
+          if (dist > 10) {
+            // FIX #3: Limit GPS history to last 100 points
+            existing.gpsHistory = [...(existing.gpsHistory || []), reading.gps].slice(-100);
+          }
+        } else {
+          existing.gpsHistory = [reading.gps];
         }
-        
-        // Capture USER location at time of first contact (Crucial for Stalker Logic)
-        if (!currentDevice.firstSeenUserPos && userLocation.current.lat !== 0) {
-            currentDevice.firstSeenUserPos = { ...userLocation.current };
-        }
-
-        // Fingerprint Check
-        const match = findFingerprintMatch(currentDevice.probedSSIDs, Array.from(map.values()));
-        
-        if (match) {
-           currentDevice.suspectedAlias = match.mac;
-           // Auto-tracking handover
-           if (match.isTracked) {
-             currentDevice.isTracked = true;
-             currentDevice.notes = `Auto-tracked: Alias of ${match.mac}`;
-           }
-           // Inherit threat level if higher
-           if (match.threatLevel === ThreatLevel.HIGH || match.threatLevel === ThreatLevel.SUSPICIOUS) {
-              currentDevice.threatLevel = match.threatLevel;
-           }
-        }
-
-        map.set(currentDevice.mac, currentDevice);
+        existing.gps = reading.gps;
       }
 
-      // --- RED ALERT TRIGGER ---
-      // Trigger if: HIGH Threat AND Strong Signal (>-65) AND Not Ignored AND Not Dismissed
-      if (currentDevice.threatLevel === ThreatLevel.HIGH && 
-          currentDevice.rssi > -65 && 
-          !currentDevice.isIgnored && 
-          !dismissedAlertsRef.current.has(currentDevice.mac)) {
-          
-          setRedAlertDevice(currentDevice);
+      // Use current location snapshot
+      if (!existing.gps && currentUserLocation.lat !== 0) {
+        existing.gps = { ...currentUserLocation };
       }
 
-    });
+      existing.probedSSIDs = [...new Set([...existing.probedSSIDs, ...reading.probedSSIDs])];
+      existing.persistenceScore = calculatePersistence(existing.firstSeen, now);
+      existing.timeWindow = calculateTimeWindow(existing.firstSeen);
 
-    return Array.from(map.values()).sort((a, b) => b.lastSeen - a.lastSeen);
-  }, []);
+      if (existing.firstSeenUserPos) {
+        // Keep it
+      } else if (reading.firstSeenUserPos) {
+        existing.firstSeenUserPos = reading.firstSeenUserPos;
+      }
+
+      // --- STALKER LOGIC (Fixed to use snapshot) ---
+      if (!existing.isIgnored && existing.threatLevel !== ThreatLevel.HIGH) {
+        const isPersistent = existing.persistenceScore > 0.75;
+
+        let distanceTraveled = 0;
+        if (existing.firstSeenUserPos && currentUserLocation.lat !== 0) {
+          distanceTraveled = calculateDistance(
+            existing.firstSeenUserPos.lat, existing.firstSeenUserPos.lng,
+            currentUserLocation.lat, currentUserLocation.lng
+          );
+        }
+
+        if (isPersistent && distanceTraveled > 500) {
+          if (existing.threatLevel !== ThreatLevel.SUSPICIOUS) {
+            existing.threatLevel = ThreatLevel.SUSPICIOUS;
+            existing.isTracked = true;
+            existing.notes = `Auto-Flagged: Followed for ${(distanceTraveled/1000).toFixed(1)}km`;
+          }
+        }
+      }
+
+      currentDevice = existing;
+      map.set(reading.mac, existing);
+    } else {
+      // New Device
+      currentDevice = { ...reading };
+
+      if (!currentDevice.gps && currentUserLocation.lat !== 0) {
+        currentDevice.gps = { ...currentUserLocation };
+      }
+
+      if (!currentDevice.firstSeenUserPos && currentUserLocation.lat !== 0) {
+        currentDevice.firstSeenUserPos = { ...currentUserLocation };
+      }
+
+      const match = findFingerprintMatch(currentDevice.probedSSIDs, Array.from(map.values()));
+      if (match) {
+        currentDevice.suspectedAlias = match.mac;
+        if (match.isTracked) {
+          currentDevice.isTracked = true;
+          currentDevice.notes = `Auto-tracked: Alias of ${match.mac}`;
+        }
+        if (match.threatLevel === ThreatLevel.HIGH || match.threatLevel === ThreatLevel.SUSPICIOUS) {
+          currentDevice.threatLevel = match.threatLevel;
+        }
+      }
+
+      map.set(currentDevice.mac, currentDevice);
+    }
+
+    // --- RED ALERT TRIGGER ---
+    if (currentDevice.threatLevel === ThreatLevel.HIGH &&
+        currentDevice.rssi > -65 &&
+        !currentDevice.isIgnored &&
+        !dismissedAlertsRef.current.has(currentDevice.mac)) {
+      setRedAlertDevice(currentDevice);
+    }
+  });
+
+  return Array.from(map.values()).sort((a, b) => b.lastSeen - a.lastSeen);
+}, []); // Empty dependency is now safe - we use snapshot pattern
 
   // Helper to parse diverse JSON formats (Native App format OR Kismet Raw format)
 // Replace the parseBackendData function in App.tsx with this fixed version
@@ -407,7 +404,7 @@ const parseBackendData = (data: any): WifiDevice[] => {
       
       // Debug log for devices with probes (remove after confirming it works)
       if (probedSSIDs.length > 0) {
-        console.log(`Device ${mac} probed SSIDs:`, probedSSIDs);
+        logger.debug(`Device ${mac} probed SSIDs:`, probedSSIDs);
       }
       // ================================================================
 
@@ -564,7 +561,8 @@ const parseBackendData = (data: any): WifiDevice[] => {
     setSelectedDevice(device);
     setAnalysisModalOpen(true);
     setAnalyzing(true);
-    const result = await analyzeDeviceSignature(device);
+    // Pass the configured data source URL so the service knows where the bridge is
+    const result = await analyzeDeviceSignature(device, settings.dataSourceUrl);
     setAnalysisResult(result);
     setAnalyzing(false);
   };

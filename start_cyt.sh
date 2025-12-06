@@ -21,6 +21,11 @@ cleanup() {
 # Trap Ctrl+C (SIGINT)
 trap cleanup SIGINT
 
+# Load environment variables if .env exists
+if [ -f .env ]; then
+    export $(cat .env | grep -v '^#' | xargs)
+fi
+
 # 1. Start the Python Bridge
 echo -e "${BLUE}[1/2] Starting Bridge Server (Port 5000)...${NC}"
 python3 cyt_bridge.py &

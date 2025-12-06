@@ -1,75 +1,43 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { WifiDevice, AnalysisResult } from '../types';
 
 export const isConfigured = (): boolean => {
-  return !!import.meta.env.VITE_API_KEY;
+  // Check if bridge is available (we no longer need client-side API key)
+  return true;
 };
 
-export const analyzeDeviceSignature = async (device: WifiDevice): Promise<AnalysisResult> => {
-  // The API key must be obtained exclusively from the environment variable import.meta.env.VITE_API_KEY.
-  const apiKey = import.meta.env.VITE_API_KEY;
-  
-  if (!apiKey) {
-    return {
-      summary: "API Configuration Missing. Please set VITE_API_KEY in your environment variables (.env file).",
-      threatScore: 0,
-      recommendation: "Config Error"
-    };
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
-
+export const analyzeDeviceSignature = async (device: WifiDevice, baseUrl: string): Promise<AnalysisResult> => {
   try {
-    const prompt = `
-      Analyze the following WiFi device signature for potential security threats in a residential or tactical monitoring context (Wardriving).
-      
-      Device Data:
-      - MAC: ${device.mac}
-      - Vendor: ${device.vendor || 'Unknown'}
-      - SSID: ${device.ssid || 'Hidden/Probe'}
-      - Signal (RSSI): ${device.rssi} dBm
-      - Type: ${device.type}
-      - Persistence: ${Math.round(device.persistenceScore * 100)}%
-      - Probed SSIDs (Networks this device is searching for): ${device.probedSSIDs.length > 0 ? device.probedSSIDs.join(', ') : 'None captured'}
-      
-      Task:
-      1. Analyze the Vendor and SSID for known threat signatures (e.g., Flipper Zero, Drones, Cameras).
-      2. Analyze the 'Probed SSIDs' list. Does it reveal the device's home network, corporate affiliation, or aggressive scanning behavior?
-      3. Determine if this device pattern suggests a normal user, a stalker/follower, or a surveillance device.
-      
-      Is this device likely a normal household device, a security camera, a drone, or a random passerby?
-      Provide a brief summary, a threat score (0-100), and a recommendation (Ignore, Monitor, or Chase).
-    `;
+    // Construct the analysis endpoint from the base data URL
+    // e.g., "http://192.168.1.50:5000/devices" -> "http://192.168.1.50:5000/analyze"
+    const analyzeUrl = baseUrl.replace('/devices', '/analyze');
 
-    const responseSchema: Schema = {
-      type: Type.OBJECT,
-      properties: {
-        summary: { type: Type.STRING },
-        threatScore: { type: Type.INTEGER },
-        recommendation: { type: Type.STRING }
+    const response = await fetch(analyzeUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      required: ["summary", "threatScore", "recommendation"]
-    };
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: responseSchema,
-        systemInstruction: "You are a cybersecurity analyst expert in WiFi signal intelligence (SIGINT). Be concise."
-      }
+      body: JSON.stringify({
+        mac: device.mac,
+        vendor: device.vendor,
+        ssid: device.ssid,
+        rssi: device.rssi,
+        type: device.type,
+        persistenceScore: device.persistenceScore,
+        probedSSIDs: device.probedSSIDs
+      })
     });
 
-    const text = response.text;
-    if (!text) throw new Error("No response from AI");
-    
-    return JSON.parse(text) as AnalysisResult;
+    if (!response.ok) {
+      throw new Error(`Bridge returned ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result as AnalysisResult;
 
   } catch (error) {
-    console.error("Gemini Analysis Error:", error);
+    console.error("Analysis Error:", error);
     return {
-      summary: "Analysis failed due to network or API error.",
+      summary: "Analysis failed. Check bridge connection and API key configuration.",
       threatScore: 0,
       recommendation: "Check Logs"
     };

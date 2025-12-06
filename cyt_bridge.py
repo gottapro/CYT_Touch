@@ -7,6 +7,98 @@ import os
 import sys
 import traceback
 
+# Load API key from environment or file
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+if not GEMINI_API_KEY and os.path.exists('.env'):
+    with open('.env') as f:
+        for line in f:
+            if line.startswith('VITE_API_KEY='):
+                GEMINI_API_KEY = line.split('=', 1)[1].strip()
+                break
+
+def analyze_device_with_gemini(device_data):
+    """Call Gemini API server-side"""
+    if not GEMINI_API_KEY:
+        return {
+            'summary': 'API Key not configured on server',
+            'threatScore': 0,
+            'recommendation': 'Config Error'
+        }
+    
+    try:
+        import urllib.request
+        import json
+        
+        # Construct prompt
+        prompt = f"""
+Analyze the following WiFi device signature for potential security threats.
+
+Device Data:
+- MAC: {device_data.get('mac')}
+- Vendor: {device_data.get('vendor', 'Unknown')}
+- SSID: {device_data.get('ssid', 'Hidden/Probe')}
+- Signal (RSSI): {device_data.get('rssi')} dBm
+- Type: {device_data.get('type')}
+- Persistence: {device_data.get('persistenceScore', 0) * 100}%
+- Probed SSIDs: {', '.join(device_data.get('probedSSIDs', [])) or 'None'}
+
+Provide:
+1. Brief summary
+2. Threat score (0-100)
+3. Recommendation (Ignore, Monitor, or Chase)
+
+Respond ONLY with valid JSON in this format:
+{{"summary": "...", "threatScore": 0, "recommendation": "..."}}
+"""
+        
+        # Call Gemini API
+        url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent'
+        headers = {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': GEMINI_API_KEY
+        }
+        
+        payload = {
+            'contents': [{
+                'parts': [{'text': prompt}]
+            }],
+            'generationConfig': {
+                'temperature': 0.7,
+                'maxOutputTokens': 500
+            }
+        }
+        
+        req = urllib.request.Request(
+            f"{url}?key={GEMINI_API_KEY}",
+            data=json.dumps(payload).encode(),
+            headers=headers,
+            method='POST'
+        )
+        
+        with urllib.request.urlopen(req, timeout=15) as response:
+            result = json.loads(response.read())
+            text = result['candidates'][0]['content']['parts'][0]['text']
+            
+            # Extract JSON from response
+            import re
+            json_match = re.search(r'\{.*\}', text, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group())
+            
+            return {
+                'summary': text[:200],
+                'threatScore': 50,
+                'recommendation': 'Monitor'
+            }
+            
+    except Exception as e:
+        print(f"Gemini API Error: {e}")
+        return {
+            'summary': f'Analysis failed: {str(e)}',
+            'threatScore': 0,
+            'recommendation': 'Error'
+        }
+
 # Configuration
 PORT = 5000
 KISMET_URL = "http://localhost:2501"
@@ -140,6 +232,31 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         """Handle POST requests for commands."""
+        
+        # NEW: AI Analysis Endpoint
+        if self.path == '/analyze':
+            try:
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                device_data = json.loads(post_data)
+                
+                print(f"Analyzing device: {device_data.get('mac')}")
+                result = analyze_device_with_gemini(device_data)
+                
+                self.send_response(200)
+                self._set_headers()
+                self.wfile.write(json.dumps(result).encode())
+            except Exception as e:
+                print(f"Analysis Error: {e}")
+                self.send_response(500)
+                self._set_headers()
+                self.wfile.write(json.dumps({
+                    'summary': 'Server error',
+                    'threatScore': 0,
+                    'recommendation': 'Error'
+                }).encode())
+            return
+    
         # Endpoint: Purge/Reset
         if self.path == '/purge':
             print("Command received: Purge Kismet Data")
