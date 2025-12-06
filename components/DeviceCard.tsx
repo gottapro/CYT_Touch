@@ -42,10 +42,31 @@ export const DeviceCard: React.FC<DeviceCardProps> = ({ device, onToggleIgnore, 
     window.open(`https://wigle.net/search?netid=${device.mac}`, '_blank');
   };
 
-  const handleProbeSearch = (ssid: string) => {
-    navigator.clipboard.writeText(ssid);
+  const handleProbeSearch = async (ssid: string) => {
+    // 1. Try to copy to clipboard (Secure Context only)
+    let copied = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(ssid);
+        copied = true;
+      }
+    } catch (e) {
+      console.warn("Clipboard failed (likely non-HTTPS)", e);
+    }
+
+    // 2. Fallback for non-secure context (HTTP)
+    if (!copied) {
+       const manualCopy = window.prompt("Copy SSID for Wigle Search:", ssid);
+       if (manualCopy === null) return; // User cancelled
+    } else {
+       // Non-blocking notification
+       // We use a short timeout to allow the window.open to trigger first if possible, 
+       // but alerts block. Let's just alert.
+       alert(`SSID "${ssid}" copied to clipboard.`);
+    }
+
+    // 3. Open Wigle
     window.open(`https://wigle.net/`, '_blank');
-    alert(`SSID "${ssid}" copied to clipboard. Paste into Wigle SSID search.`);
   };
 
   // Persistence Color
