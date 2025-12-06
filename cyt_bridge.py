@@ -257,35 +257,21 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
                 }).encode())
             return
     
-                # Endpoint: Purge/Reset
-    
-                if self.path == '/purge':
-    
-                    print("Command received: Purge Kismet Data")
-    
-                    # NOTE: Actual purging requires system permissions or Kismet API calls.
-    
-                    # For now, we return success to the UI.
-    
-                    
-    
-                    try:
-    
-                        # Make script executable and run it
-    
-                        os.system("chmod +x ./clean_kismet.sh")
-    
-                        os.system("./clean_kismet.sh")
-    
-                        
-    
-                        self.send_response(200)
-    
-                        self._set_headers()
-    
-                        self.wfile.write(json.dumps({'status': 'executed', 'message': 'Purge command received'}).encode())
-    
-                    except (BrokenPipeError, ConnectionResetError):
+        # Endpoint: Purge/Reset
+        if self.path == '/purge':
+            print("Command received: Purge Kismet Data")
+            # NOTE: Actual purging requires system permissions or Kismet API calls.
+            # For now, we return success to the UI.
+            
+            try:
+                # Make script executable and run it
+                os.system("chmod +x ./clean_kismet.sh")
+                os.system("./clean_kismet.sh")
+                
+                self.send_response(200)
+                self._set_headers()
+                self.wfile.write(json.dumps({'status': 'executed', 'message': 'Purge command received'}).encode())
+            except (BrokenPipeError, ConnectionResetError):
                 pass
             return
 
