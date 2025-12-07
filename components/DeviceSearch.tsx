@@ -23,7 +23,7 @@ export const DeviceSearch: React.FC<DeviceSearchProps> = ({
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [localValue, onChange]);
+  }, [localValue]); // Remove onChange from deps
 
   return (
     <div className="relative">

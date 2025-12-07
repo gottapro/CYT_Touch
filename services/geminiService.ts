@@ -8,7 +8,7 @@ export const isConfigured = (): boolean => {
   return !!import.meta.env.VITE_API_KEY;
 };
 
-export const analyzeDeviceSignature = async (device: WifiDevice, baseUrl: string): Promise<AnalysisResult> => {
+export const analyzeDeviceSignature = async (device: WifiDevice, baseUrl: string = 'http://localhost:5000/devices'): Promise<AnalysisResult> => {
   try {
     // Construct the analysis endpoint from the base data URL
     // e.g., "http://192.168.1.50:5000/devices" -> "http://192.168.1.50:5000/analyze"

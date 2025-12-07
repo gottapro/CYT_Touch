@@ -115,6 +115,7 @@ const App: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'error' | 'idle'>('idle');
   const [cpuTemp, setCpuTemp] = useState<number | null>(null);
+  const scanStartTimeRef = useRef<number | null>(null);
   
   // Persistence State
   const [persistenceReady, setPersistenceReady] = useState(false);
@@ -165,20 +166,20 @@ const App: React.FC = () => {
     const initDatabase = async () => {
       try {
         await db.init();
-        console.log('Database initialized');
+        logger.info('Database initialized');
         
         // Load saved devices if not in demo mode
         if (!settings.isDemoMode) {
           const savedDevices = await db.loadDevices();
           if (savedDevices.length > 0) {
-            console.log(`Restored ${savedDevices.length} devices from previous session`);
+            logger.info(`Restored ${savedDevices.length} devices from previous session`);
             setDevices(savedDevices);
           }
         }
         
         setPersistenceReady(true);
       } catch (error) {
-        console.error('Failed to initialize database:', error);
+        logger.error('Failed to initialize database:', error);
         // App still works without persistence
         setPersistenceReady(true);
       }
@@ -195,9 +196,9 @@ const App: React.FC = () => {
       try {
         await db.saveDevices(devices);
         setLastSaved(new Date());
-        console.log(`Auto-saved ${devices.length} devices`);
+        logger.debug(`Auto-saved ${devices.length} devices`);
       } catch (error) {
-        console.error('Failed to save devices:', error);
+        logger.error('Failed to save devices:', error);
       }
     }, 30000); // 30 seconds
 
@@ -542,17 +543,12 @@ const parseBackendData = (data: any): WifiDevice[] => {
       setCpuTemp(null);
 
       // Save session to database
-      if (persistenceReady && !settings.isDemoMode && devices.length > 0) {
+      if (persistenceReady && !settings.isDemoMode && devices.length > 0 && scanStartTimeRef.current) {
         try {
-          // Calculate approximate session duration since app load or logic
-          // Simplification: We use the earliest 'firstSeen' as session start if tracking session
-          // But devices might be loaded from DB. 
-          // Let's just use current duration if we had a start time, but we don't track session start explicitly.
-          // We will approximate using the oldest device seen in this active memory list.
-          const scanStart = Math.min(...devices.map(d => d.firstSeen));
-          const duration = Date.now() - scanStart;
+          const duration = Date.now() - scanStartTimeRef.current;
           await db.saveSession(devices, duration);
           console.log('Session saved to database');
+          scanStartTimeRef.current = null; // Reset
         } catch (error) {
           console.error('Failed to save session:', error);
         }
@@ -560,6 +556,7 @@ const parseBackendData = (data: any): WifiDevice[] => {
     } else {
       // START SCANNING
       setIsScanning(true);
+      scanStartTimeRef.current = Date.now(); // Record start time
       
       // Start Real-time GPS Watcher
       if (navigator.geolocation) {
@@ -614,44 +611,37 @@ const parseBackendData = (data: any): WifiDevice[] => {
     }
   };
 
-  const handleToggleIgnore = (mac: string) => {
-    setDevices(prev => prev.map(d => d.mac === mac ? { ...d, isIgnored: !d.isIgnored, isTracked: false } : d));
+  const handleToggleIgnore = async (mac: string) => {
+    const updatedDevices = devices.map(d => 
+      d.mac === mac ? { ...d, isIgnored: !d.isIgnored, isTracked: false } : d
+    );
+    
+    setDevices(updatedDevices);
     
     if (persistenceReady && !settings.isDemoMode) {
-      // Save after state updates (debounced slightly to wait for React state)
-      setTimeout(async () => {
-        try {
-          // Note: 'devices' here is stale closure, but we are just triggering a save. 
-          // However, saveDevices takes an argument. 
-          // To do this correctly inside a closure without refs is hard.
-          // We will rely on the auto-save for bulk updates, but for single actions we want immediate.
-          // We should really use the Effect to save on 'devices' change but that is too heavy (every RSSI update).
-          // Best effort: Use the 'db' service to update just one? No, our service is bulk.
-          // Let's trigger a save with the NEW state. 
-          // Since we can't easily access the new state here without an effect, 
-          // we will rely on the Auto-Save for perfect sync, OR we can force a save of the *current* ref.
-          // We have 'devicesRef' which tracks latest!
-          await db.saveDevices(devicesRef.current);
-          setLastSaved(new Date());
-        } catch (error) {
-          console.error('Failed to save after toggle:', error);
-        }
-      }, 100);
+      try {
+        await db.saveDevices(updatedDevices);
+        setLastSaved(new Date());
+      } catch (error) {
+        console.error('Failed to save after toggle:', error);
+      }
     }
   };
 
-  const handleToggleTrack = (mac: string) => {
-    setDevices(prev => prev.map(d => d.mac === mac ? { ...d, isTracked: !d.isTracked, isIgnored: false } : d));
+  const handleToggleTrack = async (mac: string) => {
+    const updatedDevices = devices.map(d => 
+      d.mac === mac ? { ...d, isTracked: !d.isTracked, isIgnored: false } : d
+    );
+    
+    setDevices(updatedDevices);
     
     if (persistenceReady && !settings.isDemoMode) {
-      setTimeout(async () => {
-        try {
-          await db.saveDevices(devicesRef.current);
-          setLastSaved(new Date());
-        } catch (error) {
-          console.error('Failed to save after toggle:', error);
-        }
-      }, 100);
+      try {
+        await db.saveDevices(updatedDevices);
+        setLastSaved(new Date());
+      } catch (error) {
+        console.error('Failed to save after toggle:', error);
+      }
     }
   };
 
