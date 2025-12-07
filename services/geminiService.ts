@@ -1,8 +1,11 @@
 import { WifiDevice, AnalysisResult } from '../types';
 
 export const isConfigured = (): boolean => {
-  // Check if bridge is available (we no longer need client-side API key)
-  return true;
+  // We can't synchronously check the backend here. 
+  // Ideally, SettingsModal should fetch this status.
+  // For now, returning false ensures the user sees the setup instructions if they are having trouble.
+  // Or we could check import.meta.env.VITE_API_KEY as a hint, but the backend is what matters.
+  return !!import.meta.env.VITE_API_KEY;
 };
 
 export const analyzeDeviceSignature = async (device: WifiDevice, baseUrl: string): Promise<AnalysisResult> => {
