@@ -17,7 +17,7 @@ if not GEMINI_API_KEY and os.path.exists('.env'):
                 break
 
 def analyze_device_with_gemini(device_data):
-    """Call Gemini API with fallback to multiple API versions"""
+    """Call Gemini API with detailed Unicode debugging"""
     print(f"\n{'='*60}")
     print(f"[DEBUG] Starting analysis for device: {device_data.get('mac')}")
     
@@ -31,19 +31,66 @@ def analyze_device_with_gemini(device_data):
     
     print(f"[DEBUG] API Key present: {GEMINI_API_KEY[:8]}...")
     
-    # Construct prompt - with safe string handling
-    probed_ssids = device_data.get('probedSSIDs', [])
-    # Filter out any non-ASCII characters from probed SSIDs
-    probed_ssids = [ssid.encode('ascii', 'ignore').decode('ascii') for ssid in probed_ssids]
-    probed_str = ', '.join(probed_ssids) if probed_ssids else 'None'
-    
-    # Safely encode all string fields
-    mac = str(device_data.get('mac', 'Unknown')).encode('ascii', 'ignore').decode('ascii')
-    vendor = str(device_data.get('vendor', 'Unknown')).encode('ascii', 'ignore').decode('ascii')
-    ssid = str(device_data.get('ssid', 'Hidden')).encode('ascii', 'ignore').decode('ascii')
-    device_type = str(device_data.get('type', 'Unknown')).encode('ascii', 'ignore').decode('ascii')
-    
-    prompt = f"""Analyze this WiFi device for security threats:
+    try:
+        # Construct prompt with extensive Unicode safety
+        print("[DEBUG] Processing device data fields...")
+        
+        probed_ssids = device_data.get('probedSSIDs', [])
+        print(f"[DEBUG] Raw probedSSIDs: {probed_ssids}")
+        
+        # Safely process each field
+        try:
+            mac = str(device_data.get('mac', 'Unknown'))
+            print(f"[DEBUG] MAC (raw): {repr(mac)}")
+            mac = mac.encode('ascii', 'ignore').decode('ascii') or 'Unknown'
+            print(f"[DEBUG] MAC (safe): {mac}")
+        except Exception as e:
+            print(f"[ERROR] MAC encoding failed: {e}")
+            mac = 'Unknown'
+        
+        try:
+            vendor = str(device_data.get('vendor', 'Unknown'))
+            print(f"[DEBUG] Vendor (raw): {repr(vendor)}")
+            vendor = vendor.encode('ascii', 'ignore').decode('ascii') or 'Unknown'
+            print(f"[DEBUG] Vendor (safe): {vendor}")
+        except Exception as e:
+            print(f"[ERROR] Vendor encoding failed: {e}")
+            vendor = 'Unknown'
+        
+        try:
+            ssid = str(device_data.get('ssid', 'Hidden'))
+            print(f"[DEBUG] SSID (raw): {repr(ssid)}")
+            ssid = ssid.encode('ascii', 'ignore').decode('ascii') or 'Hidden'
+            print(f"[DEBUG] SSID (safe): {ssid}")
+        except Exception as e:
+            print(f"[ERROR] SSID encoding failed: {e}")
+            ssid = 'Hidden'
+        
+        try:
+            device_type = str(device_data.get('type', 'Unknown'))
+            print(f"[DEBUG] Type (raw): {repr(device_type)}")
+            device_type = device_type.encode('ascii', 'ignore').decode('ascii') or 'Unknown'
+            print(f"[DEBUG] Type (safe): {device_type}")
+        except Exception as e:
+            print(f"[ERROR] Type encoding failed: {e}")
+            device_type = 'Unknown'
+        
+        try:
+            probed_safe = []
+            for ssid in probed_ssids:
+                safe = str(ssid).encode('ascii', 'ignore').decode('ascii')
+                if safe:
+                    probed_safe.append(safe)
+            probed_str = ', '.join(probed_safe) if probed_safe else 'None'
+            print(f"[DEBUG] Probed SSIDs (safe): {probed_str}")
+        except Exception as e:
+            print(f"[ERROR] Probed SSIDs encoding failed: {e}")
+            probed_str = 'None'
+        
+        print("[DEBUG] All fields processed successfully")
+        
+        # Build prompt
+        prompt = f"""Analyze this WiFi device for security threats:
 
 MAC: {mac}
 Vendor: {vendor}
@@ -53,147 +100,154 @@ Type: {device_type}
 Persistence: {int(device_data.get('persistenceScore', 0) * 100)}%
 Probed SSIDs: {probed_str}
 
-Provide a brief security analysis. Respond with JSON only (no markdown):
+Provide a brief security analysis. Respond with JSON only:
 {{"summary": "brief analysis", "threatScore": 0, "recommendation": "Ignore"}}"""
-    
-    # Try multiple API endpoints - updated with gemini-2.0-flash-exp
-    api_endpoints = [
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent',
-        'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent',
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
-        'https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent',
-    ]
-    
-    payload = {
-        'contents': [{
-            'parts': [{'text': prompt}]
-        }],
-        'generationConfig': {
-            'temperature': 0.7,
-            'maxOutputTokens': 500
+        
+        print(f"[DEBUG] Prompt created ({len(prompt)} chars)")
+        print(f"[DEBUG] Prompt preview: {prompt[:100]}...")
+        
+        # Try API endpoints
+        api_endpoints = [
+            ('v1beta', 'gemini-2.0-flash-exp'),
+            ('v1', 'gemini-1.5-flash'),
+            ('v1beta', 'gemini-1.5-flash'),
+            ('v1', 'gemini-pro'),
+        ]
+        
+        payload = {
+            'contents': [{
+                'parts': [{'text': prompt}]
+            }],
+            'generationConfig': {
+                'temperature': 0.7,
+                'maxOutputTokens': 500
+            }
         }
-    }
-    
-    last_error = None
-    
-    for url in api_endpoints:
-        try:
-            print(f"[DEBUG] Trying: {url}")
-            
-            req = urllib.request.Request(
-                f"{url}?key={GEMINI_API_KEY}",
-                data=json.dumps(payload).encode('utf-8'),
-                headers={'Content-Type': 'application/json'},
-                method='POST'
-            )
-            
-            with urllib.request.urlopen(req, timeout=15) as response:
-                response_text = response.read().decode('utf-8')
-                print(f"[DEBUG] ✓ Success with {url.split('/')[5]}")
+        
+        print("[DEBUG] Payload structure created")
+        
+        for api_version, model in api_endpoints:
+            try:
+                url = f'https://generativelanguage.googleapis.com/{api_version}/models/{model}:generateContent'
+                print(f"\n[DEBUG] Trying: {api_version}/{model}")
                 
-                result = json.loads(response_text)
-                
-                # Navigate the response structure safely
-                if 'candidates' not in result or len(result['candidates']) == 0:
-                    print(f"[WARN] No candidates in response, trying next endpoint")
-                    continue
-                
-                candidate = result['candidates'][0]
-                
-                # Check for content blocking
-                if 'content' not in candidate:
-                    if 'finishReason' in candidate:
-                        reason = candidate['finishReason']
-                        print(f"[WARN] Response blocked: {reason}")
-                        return {
-                            'summary': f'Content blocked: {reason}',
-                            'threatScore': 0,
-                            'recommendation': 'Unable to analyze'
-                        }
-                    print(f"[WARN] No content in candidate, trying next endpoint")
-                    continue
-                
-                content = candidate['content']
-                
-                if 'parts' not in content or len(content['parts']) == 0:
-                    print(f"[WARN] No parts in content, trying next endpoint")
-                    continue
-                
-                text = content['parts'][0].get('text', '')
-                print(f"[DEBUG] Text received: {text[:100]}...")
-                
-                # Clean up the response
-                import re
-                text = text.strip()
-                text = re.sub(r'^```json\s*', '', text)
-                text = re.sub(r'^```\s*', '', text)
-                text = re.sub(r'\s*```$', '', text)
-                text = text.strip()
-                
-                # Parse JSON
+                # Serialize payload
                 try:
-                    parsed = json.loads(text)
-                    print(f"[DEBUG] ✓ Successfully parsed JSON")
+                    payload_json = json.dumps(payload)
+                    print(f"[DEBUG] Payload serialized ({len(payload_json)} bytes)")
+                except Exception as e:
+                    print(f"[ERROR] JSON serialization failed: {e}")
+                    continue
+                
+                # Encode to bytes
+                try:
+                    payload_bytes = payload_json.encode('utf-8')
+                    print(f"[DEBUG] Payload encoded to UTF-8")
+                except Exception as e:
+                    print(f"[ERROR] UTF-8 encoding failed: {e}")
+                    print(f"[ERROR] This is the Unicode issue!")
+                    print(f"[ERROR] Problematic JSON: {payload_json[:200]}")
+                    continue
+                
+                # Make request
+                req = urllib.request.Request(
+                    f"{url}?key={GEMINI_API_KEY}",
+                    data=payload_bytes,
+                    headers={'Content-Type': 'application/json; charset=utf-8'},
+                    method='POST'
+                )
+                
+                print(f"[DEBUG] Request created, sending...")
+                
+                with urllib.request.urlopen(req, timeout=15) as response:
+                    response_text = response.read().decode('utf-8')
+                    print(f"[DEBUG] ✓ Success with {model}")
                     
-                    result = {
-                        'summary': str(parsed.get('summary', 'Analysis completed'))[:500],
-                        'threatScore': int(parsed.get('threatScore', 50)),
-                        'recommendation': str(parsed.get('recommendation', 'Monitor'))
-                    }
+                    result = json.loads(response_text)
                     
-                    print(f"[DEBUG] Returning: {result['summary'][:50]}...")
-                    print(f"{'='*60}\n")
-                    return result
+                    # Parse response
+                    if 'candidates' not in result or len(result['candidates']) == 0:
+                        print(f"[WARN] No candidates, trying next")
+                        continue
                     
-                except json.JSONDecodeError:
-                    print(f"[WARN] Could not parse JSON, using text as summary")
-                    # Try to extract JSON with regex
-                    json_match = re.search(r'\{[^{}]*"summary"[^{}]*\}', text)
-                    if json_match:
-                        try:
-                            return json.loads(json_match.group())
-                        except:
-                            pass
+                    candidate = result['candidates'][0]
                     
-                    # Fallback: use the text
+                    if 'content' not in candidate:
+                        print(f"[WARN] No content, trying next")
+                        continue
+                    
+                    content = candidate['content']
+                    
+                    if 'parts' not in content or len(content['parts']) == 0:
+                        print(f"[WARN] No parts, trying next")
+                        continue
+                    
+                    text = content['parts'][0].get('text', '')
+                    print(f"[DEBUG] Response text: {text[:100]}...")
+                    
+                    # Clean and parse
+                    import re
+                    text = text.strip()
+                    text = re.sub(r'^```json\s*', '', text)
+                    text = re.sub(r'^```\s*', '', text)
+                    text = re.sub(r'\s*```$', '', text)
+                    text = text.strip()
+                    
+                    try:
+                        parsed = json.loads(text)
+                        result = {
+                            'summary': str(parsed.get('summary', 'Analysis completed'))[:500],
+                            'threatScore': int(parsed.get('threatScore', 50)),
+                            'recommendation': str(parsed.get('recommendation', 'Monitor'))
+                        }
+                        print(f"[DEBUG] ✓ Success! Returning result")
+                        print(f"{'='*60}\n")
+                        return result
+                    except json.JSONDecodeError:
+                        return {
+                            'summary': text[:200] if text else 'No text',
+                            'threatScore': 50,
+                            'recommendation': 'Monitor'
+                        }
+            
+            except urllib.error.HTTPError as e:
+                print(f"[WARN] HTTP {e.code} for {model}")
+                if e.code == 429:
                     return {
-                        'summary': text[:200] if text else 'No analysis text',
-                        'threatScore': 50,
-                        'recommendation': 'Monitor'
+                        'summary': 'Rate limit exceeded (wait 60s)',
+                        'threatScore': 0,
+                        'recommendation': 'Wait'
                     }
-        
-        except urllib.error.HTTPError as e:
-            print(f"[WARN] {url.split('/')[5]} returned HTTP {e.code}")
-            if e.code == 404:
-                # Model not found, try next one
-                last_error = e
                 continue
-            elif e.code == 429:
-                # Rate limit - don't try other endpoints
-                return {
-                    'summary': 'Rate limit exceeded (wait 60s)',
-                    'threatScore': 0,
-                    'recommendation': 'Wait'
-                }
-            else:
-                last_error = e
+            
+            except UnicodeEncodeError as ue:
+                print(f"[ERROR] UnicodeEncodeError for {model}: {ue}")
+                print(f"[ERROR] Character position: {ue.start}-{ue.end}")
+                print(f"[ERROR] Object: {repr(ue.object[max(0, ue.start-20):ue.end+20])}")
+                continue
+            
+            except Exception as e:
+                print(f"[ERROR] {type(e).__name__} for {model}: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 continue
         
-        except Exception as e:
-            print(f"[WARN] Error with endpoint: {type(e).__name__}")
-            last_error = e
-            continue
+        print(f"[ERROR] All endpoints failed")
+        return {
+            'summary': 'All API endpoints failed',
+            'threatScore': 0,
+            'recommendation': 'Error'
+        }
     
-    # If we get here, all endpoints failed
-    print(f"[ERROR] All API endpoints failed")
-    if last_error:
-        print(f"[ERROR] Last error: {last_error}")
-    
-    return {
-        'summary': 'All Gemini API endpoints failed. Check API key and network.',
-        'threatScore': 0,
-        'recommendation': 'Error'
-    }
+    except Exception as e:
+        print(f"[ERROR] Top-level error: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            'summary': f'Error: {type(e).__name__}',
+            'threatScore': 0,
+            'recommendation': 'Error'
+        }
 
 
 # Configuration
