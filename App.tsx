@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Radar, Settings, Play, Square, Search, AlertCircle, RefreshCw, HelpCircle, Thermometer, EyeOff } from 'lucide-react';
+import { Radar, Settings, Play, Square, Search, AlertCircle, RefreshCw, HelpCircle, Thermometer, EyeOff, Database } from 'lucide-react';
 import { WifiDevice, DeviceType, ThreatLevel, AnalysisResult, AppSettings, GPSCoordinate } from './types';
 import { DeviceCard } from './components/DeviceCard';
 import { AnalysisModal } from './components/AnalysisModal';
@@ -8,6 +8,8 @@ import { HelpModal } from './components/HelpModal';
 import { RedAlert } from './components/RedAlert';
 import { analyzeDeviceSignature } from './services/geminiService';
 import { DeviceSearch } from './components/DeviceSearch';
+import { db } from './services/dbService';
+import { StatsModal } from './components/StatsModal';
 
 const isDev = import.meta.env.DEV;
 
@@ -114,10 +116,15 @@ const App: React.FC = () => {
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'error' | 'idle'>('idle');
   const [cpuTemp, setCpuTemp] = useState<number | null>(null);
   
+  // Persistence State
+  const [persistenceReady, setPersistenceReady] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  
   // Modals
   const [analysisModalOpen, setAnalysisModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
+  const [statsModalOpen, setStatsModalOpen] = useState(false);
   
   // Red Alert State
   const [redAlertDevice, setRedAlertDevice] = useState<WifiDevice | null>(null);
@@ -152,6 +159,50 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('cyt_settings', JSON.stringify(settings));
   }, [settings]);
+
+  // Initialize database and load saved data
+  useEffect(() => {
+    const initDatabase = async () => {
+      try {
+        await db.init();
+        console.log('Database initialized');
+        
+        // Load saved devices if not in demo mode
+        if (!settings.isDemoMode) {
+          const savedDevices = await db.loadDevices();
+          if (savedDevices.length > 0) {
+            console.log(`Restored ${savedDevices.length} devices from previous session`);
+            setDevices(savedDevices);
+          }
+        }
+        
+        setPersistenceReady(true);
+      } catch (error) {
+        console.error('Failed to initialize database:', error);
+        // App still works without persistence
+        setPersistenceReady(true);
+      }
+    };
+
+    initDatabase();
+  }, [settings.isDemoMode]);
+
+  // Auto-save devices every 30 seconds
+  useEffect(() => {
+    if (!persistenceReady || settings.isDemoMode) return;
+
+    const saveInterval = setInterval(async () => {
+      try {
+        await db.saveDevices(devices);
+        setLastSaved(new Date());
+        console.log(`Auto-saved ${devices.length} devices`);
+      } catch (error) {
+        console.error('Failed to save devices:', error);
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(saveInterval);
+  }, [devices, persistenceReady, settings.isDemoMode]);
 
   // Clean up GPS watch on unmount
   useEffect(() => {
@@ -489,6 +540,23 @@ const parseBackendData = (data: any): WifiDevice[] => {
       setIsScanning(false);
       setConnectionStatus('idle');
       setCpuTemp(null);
+
+      // Save session to database
+      if (persistenceReady && !settings.isDemoMode && devices.length > 0) {
+        try {
+          // Calculate approximate session duration since app load or logic
+          // Simplification: We use the earliest 'firstSeen' as session start if tracking session
+          // But devices might be loaded from DB. 
+          // Let's just use current duration if we had a start time, but we don't track session start explicitly.
+          // We will approximate using the oldest device seen in this active memory list.
+          const scanStart = Math.min(...devices.map(d => d.firstSeen));
+          const duration = Date.now() - scanStart;
+          await db.saveSession(devices, duration);
+          console.log('Session saved to database');
+        } catch (error) {
+          console.error('Failed to save session:', error);
+        }
+      }
     } else {
       // START SCANNING
       setIsScanning(true);
@@ -548,10 +616,43 @@ const parseBackendData = (data: any): WifiDevice[] => {
 
   const handleToggleIgnore = (mac: string) => {
     setDevices(prev => prev.map(d => d.mac === mac ? { ...d, isIgnored: !d.isIgnored, isTracked: false } : d));
+    
+    if (persistenceReady && !settings.isDemoMode) {
+      // Save after state updates (debounced slightly to wait for React state)
+      setTimeout(async () => {
+        try {
+          // Note: 'devices' here is stale closure, but we are just triggering a save. 
+          // However, saveDevices takes an argument. 
+          // To do this correctly inside a closure without refs is hard.
+          // We will rely on the auto-save for bulk updates, but for single actions we want immediate.
+          // We should really use the Effect to save on 'devices' change but that is too heavy (every RSSI update).
+          // Best effort: Use the 'db' service to update just one? No, our service is bulk.
+          // Let's trigger a save with the NEW state. 
+          // Since we can't easily access the new state here without an effect, 
+          // we will rely on the Auto-Save for perfect sync, OR we can force a save of the *current* ref.
+          // We have 'devicesRef' which tracks latest!
+          await db.saveDevices(devicesRef.current);
+          setLastSaved(new Date());
+        } catch (error) {
+          console.error('Failed to save after toggle:', error);
+        }
+      }, 100);
+    }
   };
 
   const handleToggleTrack = (mac: string) => {
     setDevices(prev => prev.map(d => d.mac === mac ? { ...d, isTracked: !d.isTracked, isIgnored: false } : d));
+    
+    if (persistenceReady && !settings.isDemoMode) {
+      setTimeout(async () => {
+        try {
+          await db.saveDevices(devicesRef.current);
+          setLastSaved(new Date());
+        } catch (error) {
+          console.error('Failed to save after toggle:', error);
+        }
+      }, 100);
+    }
   };
 
   const handleTailAll = () => {
@@ -643,10 +744,27 @@ const parseBackendData = (data: any): WifiDevice[] => {
                    <span className={cpuTemp > 70 ? 'text-red-400 font-bold' : ''}>{cpuTemp.toFixed(1)}°C</span>
                  </div>
                )}
+               
+               {/* Persistence Status Indicator */}
+               {persistenceReady && !settings.isDemoMode && lastSaved && (
+                 <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                   <Database className="w-3 h-3" />
+                   <span title={`Last saved: ${lastSaved.toLocaleTimeString()}`}>
+                     Saved {Math.round((Date.now() - lastSaved.getTime()) / 1000)}s ago
+                   </span>
+                 </div>
+               )}
             </div>
           </div>
         </div>
         <div className="flex gap-2">
+           <button 
+             onClick={() => setStatsModalOpen(true)}
+             className="p-3 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors active:scale-95"
+             title="Session Statistics"
+           >
+             <Database size={22} />
+           </button>
            <button 
              onClick={() => setHelpModalOpen(true)}
              className="p-3 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors active:scale-95"
@@ -789,6 +907,11 @@ const parseBackendData = (data: any): WifiDevice[] => {
         settings={settings}
         onSave={setSettings}
         devices={devices}
+      />
+
+      <StatsModal 
+        isOpen={statsModalOpen}
+        onClose={() => setStatsModalOpen(false)}
       />
 
       <HelpModal isOpen={helpModalOpen} onClose={() => setHelpModalOpen(false)} />

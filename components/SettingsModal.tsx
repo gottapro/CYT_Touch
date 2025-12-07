@@ -4,6 +4,7 @@ import { AppSettings, WifiDevice } from '../types';
 import { downloadKML } from '../services/kmlService';
 import { downloadReport } from '../services/reportService';
 import { isConfigured } from '../services/geminiService';
+import { db } from '../services/dbService';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -60,6 +61,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
   const handleClearLocal = () => {
      localStorage.removeItem('cyt_settings');
      window.location.reload();
+  };
+
+  const handleExportData = async () => {
+    const devices = await db.loadDevices();
+    const sessions = await db.getSessions(100);
+    
+    const exportData = {
+      version: '1.1.0',
+      exportDate: new Date().toISOString(),
+      devices,
+      sessions
+    };
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cyt-backup-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   if (!isOpen) return null;
@@ -190,6 +211,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                 >
                    <RefreshCw size={20} />
                    <span className="text-xs font-bold">Reset App</span>
+                </button>
+                <button 
+                   onClick={handleExportData}
+                   className="col-span-2 p-3 bg-slate-800 border border-slate-700 hover:bg-slate-700 text-cyt-accent rounded-xl flex flex-col items-center justify-center gap-1 transition-colors"
+                >
+                   <Database size={20} />
+                   <span className="text-xs font-bold">Export Full Backup (JSON)</span>
                 </button>
              </div>
              {actionStatus && <p className="text-xs text-green-400 text-center animate-pulse">{actionStatus}</p>}
