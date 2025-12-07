@@ -532,7 +532,7 @@ const parseBackendData = (data: any): WifiDevice[] => {
     }
   };
 
-  const toggleScan = () => {
+  const toggleScan = async () => {
     if (isScanning) {
       // STOP SCANNING
       if (scanIntervalRef.current) window.clearInterval(scanIntervalRef.current);
