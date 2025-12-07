@@ -17,7 +17,7 @@ if not GEMINI_API_KEY and os.path.exists('.env'):
                 break
 
 def analyze_device_with_gemini(device_data):
-    """Call Gemini API with detailed Unicode debugging"""
+    """Call Gemini API - fully ASCII-safe including logs"""
     print(f"\n{'='*60}")
     print(f"[DEBUG] Starting analysis for device: {device_data.get('mac')}")
     
@@ -32,62 +32,21 @@ def analyze_device_with_gemini(device_data):
     print(f"[DEBUG] API Key present: {GEMINI_API_KEY[:8]}...")
     
     try:
-        # Construct prompt with extensive Unicode safety
-        print("[DEBUG] Processing device data fields...")
+        # Safely process all fields
+        mac = str(device_data.get('mac', 'Unknown')).encode('ascii', 'ignore').decode('ascii') or 'Unknown'
+        vendor = str(device_data.get('vendor', 'Unknown')).encode('ascii', 'ignore').decode('ascii') or 'Unknown'
+        ssid = str(device_data.get('ssid', 'Hidden')).encode('ascii', 'ignore').decode('ascii') or 'Hidden'
+        device_type = str(device_data.get('type', 'Unknown')).encode('ascii', 'ignore').decode('ascii') or 'Unknown'
         
         probed_ssids = device_data.get('probedSSIDs', [])
-        print(f"[DEBUG] Raw probedSSIDs: {probed_ssids}")
+        probed_safe = []
+        for s in probed_ssids:
+            safe = str(s).encode('ascii', 'ignore').decode('ascii')
+            if safe:
+                probed_safe.append(safe)
+        probed_str = ', '.join(probed_safe) if probed_safe else 'None'
         
-        # Safely process each field
-        try:
-            mac = str(device_data.get('mac', 'Unknown'))
-            print(f"[DEBUG] MAC (raw): {repr(mac)}")
-            mac = mac.encode('ascii', 'ignore').decode('ascii') or 'Unknown'
-            print(f"[DEBUG] MAC (safe): {mac}")
-        except Exception as e:
-            print(f"[ERROR] MAC encoding failed: {e}")
-            mac = 'Unknown'
-        
-        try:
-            vendor = str(device_data.get('vendor', 'Unknown'))
-            print(f"[DEBUG] Vendor (raw): {repr(vendor)}")
-            vendor = vendor.encode('ascii', 'ignore').decode('ascii') or 'Unknown'
-            print(f"[DEBUG] Vendor (safe): {vendor}")
-        except Exception as e:
-            print(f"[ERROR] Vendor encoding failed: {e}")
-            vendor = 'Unknown'
-        
-        try:
-            ssid = str(device_data.get('ssid', 'Hidden'))
-            print(f"[DEBUG] SSID (raw): {repr(ssid)}")
-            ssid = ssid.encode('ascii', 'ignore').decode('ascii') or 'Hidden'
-            print(f"[DEBUG] SSID (safe): {ssid}")
-        except Exception as e:
-            print(f"[ERROR] SSID encoding failed: {e}")
-            ssid = 'Hidden'
-        
-        try:
-            device_type = str(device_data.get('type', 'Unknown'))
-            print(f"[DEBUG] Type (raw): {repr(device_type)}")
-            device_type = device_type.encode('ascii', 'ignore').decode('ascii') or 'Unknown'
-            print(f"[DEBUG] Type (safe): {device_type}")
-        except Exception as e:
-            print(f"[ERROR] Type encoding failed: {e}")
-            device_type = 'Unknown'
-        
-        try:
-            probed_safe = []
-            for ssid in probed_ssids:
-                safe = str(ssid).encode('ascii', 'ignore').decode('ascii')
-                if safe:
-                    probed_safe.append(safe)
-            probed_str = ', '.join(probed_safe) if probed_safe else 'None'
-            print(f"[DEBUG] Probed SSIDs (safe): {probed_str}")
-        except Exception as e:
-            print(f"[ERROR] Probed SSIDs encoding failed: {e}")
-            probed_str = 'None'
-        
-        print("[DEBUG] All fields processed successfully")
+        print("[DEBUG] All fields processed")
         
         # Build prompt
         prompt = f"""Analyze this WiFi device for security threats:
@@ -104,7 +63,6 @@ Provide a brief security analysis. Respond with JSON only:
 {{"summary": "brief analysis", "threatScore": 0, "recommendation": "Ignore"}}"""
         
         print(f"[DEBUG] Prompt created ({len(prompt)} chars)")
-        print(f"[DEBUG] Prompt preview: {prompt[:100]}...")
         
         # Try API endpoints
         api_endpoints = [
@@ -124,30 +82,14 @@ Provide a brief security analysis. Respond with JSON only:
             }
         }
         
-        print("[DEBUG] Payload structure created")
-        
         for api_version, model in api_endpoints:
             try:
                 url = f'https://generativelanguage.googleapis.com/{api_version}/models/{model}:generateContent'
-                print(f"\n[DEBUG] Trying: {api_version}/{model}")
+                print(f"[DEBUG] Trying: {api_version}/{model}")
                 
-                # Serialize payload
-                try:
-                    payload_json = json.dumps(payload)
-                    print(f"[DEBUG] Payload serialized ({len(payload_json)} bytes)")
-                except Exception as e:
-                    print(f"[ERROR] JSON serialization failed: {e}")
-                    continue
-                
-                # Encode to bytes
-                try:
-                    payload_bytes = payload_json.encode('utf-8')
-                    print(f"[DEBUG] Payload encoded to UTF-8")
-                except Exception as e:
-                    print(f"[ERROR] UTF-8 encoding failed: {e}")
-                    print(f"[ERROR] This is the Unicode issue!")
-                    print(f"[ERROR] Problematic JSON: {payload_json[:200]}")
-                    continue
+                # Serialize and encode
+                payload_json = json.dumps(payload)
+                payload_bytes = payload_json.encode('utf-8')
                 
                 # Make request
                 req = urllib.request.Request(
@@ -157,11 +99,9 @@ Provide a brief security analysis. Respond with JSON only:
                     method='POST'
                 )
                 
-                print(f"[DEBUG] Request created, sending...")
-                
                 with urllib.request.urlopen(req, timeout=15) as response:
                     response_text = response.read().decode('utf-8')
-                    print(f"[DEBUG] ✓ Success with {model}")
+                    print(f"[DEBUG] SUCCESS with {model}")
                     
                     result = json.loads(response_text)
                     
@@ -183,7 +123,7 @@ Provide a brief security analysis. Respond with JSON only:
                         continue
                     
                     text = content['parts'][0].get('text', '')
-                    print(f"[DEBUG] Response text: {text[:100]}...")
+                    print(f"[DEBUG] Got response ({len(text)} chars)")
                     
                     # Clean and parse
                     import re
@@ -200,12 +140,14 @@ Provide a brief security analysis. Respond with JSON only:
                             'threatScore': int(parsed.get('threatScore', 50)),
                             'recommendation': str(parsed.get('recommendation', 'Monitor'))
                         }
-                        print(f"[DEBUG] ✓ Success! Returning result")
+                        print(f"[DEBUG] Analysis complete - Score: {result['threatScore']}")
                         print(f"{'='*60}\n")
                         return result
                     except json.JSONDecodeError:
+                        # Fallback: use text as summary
+                        print(f"[WARN] Could not parse JSON, using text")
                         return {
-                            'summary': text[:200] if text else 'No text',
+                            'summary': text[:200] if text else 'No text returned',
                             'threatScore': 50,
                             'recommendation': 'Monitor'
                         }
@@ -214,37 +156,30 @@ Provide a brief security analysis. Respond with JSON only:
                 print(f"[WARN] HTTP {e.code} for {model}")
                 if e.code == 429:
                     return {
-                        'summary': 'Rate limit exceeded (wait 60s)',
+                        'summary': 'Rate limit exceeded. Wait 60 seconds.',
                         'threatScore': 0,
                         'recommendation': 'Wait'
                     }
                 continue
             
-            except UnicodeEncodeError as ue:
-                print(f"[ERROR] UnicodeEncodeError for {model}: {ue}")
-                print(f"[ERROR] Character position: {ue.start}-{ue.end}")
-                print(f"[ERROR] Object: {repr(ue.object[max(0, ue.start-20):ue.end+20])}")
-                continue
-            
             except Exception as e:
-                print(f"[ERROR] {type(e).__name__} for {model}: {str(e)}")
-                import traceback
-                traceback.print_exc()
+                print(f"[ERROR] {type(e).__name__} for {model}")
                 continue
         
-        print(f"[ERROR] All endpoints failed")
+        # All endpoints failed
+        print(f"[ERROR] All API endpoints failed")
         return {
-            'summary': 'All API endpoints failed',
+            'summary': 'All API endpoints failed. Check logs.',
             'threatScore': 0,
             'recommendation': 'Error'
         }
     
     except Exception as e:
-        print(f"[ERROR] Top-level error: {type(e).__name__}: {str(e)}")
+        print(f"[ERROR] Top-level error: {type(e).__name__}")
         import traceback
         traceback.print_exc()
         return {
-            'summary': f'Error: {type(e).__name__}',
+            'summary': f'Server error: {type(e).__name__}',
             'threatScore': 0,
             'recommendation': 'Error'
         }
