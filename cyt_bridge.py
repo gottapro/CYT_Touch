@@ -31,29 +31,37 @@ def analyze_device_with_gemini(device_data):
     
     print(f"[DEBUG] API Key present: {GEMINI_API_KEY[:8]}...")
     
-    # Construct prompt
+    # Construct prompt - with safe string handling
     probed_ssids = device_data.get('probedSSIDs', [])
+    # Filter out any non-ASCII characters from probed SSIDs
+    probed_ssids = [ssid.encode('ascii', 'ignore').decode('ascii') for ssid in probed_ssids]
     probed_str = ', '.join(probed_ssids) if probed_ssids else 'None'
+    
+    # Safely encode all string fields
+    mac = str(device_data.get('mac', 'Unknown')).encode('ascii', 'ignore').decode('ascii')
+    vendor = str(device_data.get('vendor', 'Unknown')).encode('ascii', 'ignore').decode('ascii')
+    ssid = str(device_data.get('ssid', 'Hidden')).encode('ascii', 'ignore').decode('ascii')
+    device_type = str(device_data.get('type', 'Unknown')).encode('ascii', 'ignore').decode('ascii')
     
     prompt = f"""Analyze this WiFi device for security threats:
 
-MAC: {device_data.get('mac', 'Unknown')}
-Vendor: {device_data.get('vendor', 'Unknown')}
-SSID: {device_data.get('ssid', 'Hidden/Probe')}
+MAC: {mac}
+Vendor: {vendor}
+SSID: {ssid}
 Signal: {device_data.get('rssi', -90)} dBm
-Type: {device_data.get('type', 'Unknown')}
+Type: {device_type}
 Persistence: {int(device_data.get('persistenceScore', 0) * 100)}%
 Probed SSIDs: {probed_str}
 
 Provide a brief security analysis. Respond with JSON only (no markdown):
 {{"summary": "brief analysis", "threatScore": 0, "recommendation": "Ignore"}}"""
     
-    # Try multiple API endpoints in order of preference
+    # Try multiple API endpoints - updated with gemini-2.0-flash-exp
     api_endpoints = [
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent',
         'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent',
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
         'https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent',
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
     ]
     
     payload = {
