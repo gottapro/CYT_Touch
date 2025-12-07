@@ -316,51 +316,55 @@ class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
-    """Handle POST requests for commands."""
-    
-    # AI Analysis Endpoint
-    if self.path == '/analyze':
-        try:
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            device_data = json.loads(post_data)
-            
-            print(f"[INFO] Analyzing device: {device_data.get('mac')}")
-            result = analyze_device_with_gemini(device_data)
-            
-            self.send_response(200)
-            self._set_headers()
-            self.wfile.write(json.dumps(result).encode())
-        except Exception as e:
-            print(f"[ERROR] Analysis endpoint error: {e}")
-            import traceback
-            traceback.print_exc()
-            
+        """Handle POST requests for commands."""
+        
+        # AI Analysis Endpoint
+        if self.path == '/analyze':
             try:
-                self.send_response(500)
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                device_data = json.loads(post_data)
+                
+                print(f"[INFO] Analyzing device: {device_data.get('mac')}")
+                result = analyze_device_with_gemini(device_data)
+                
+                self.send_response(200)
                 self._set_headers()
-                self.wfile.write(json.dumps({
-                    'summary': f'Server error: {str(e)}',
-                    'threatScore': 0,
-                    'recommendation': 'Error'
-                }).encode())
-            except:
+                self.wfile.write(json.dumps(result).encode())
+            except Exception as e:
+                print(f"[ERROR] Analysis endpoint error: {e}")
+                import traceback
+                traceback.print_exc()
+                
+                try:
+                    self.send_response(500)
+                    self._set_headers()
+                    self.wfile.write(json.dumps({
+                        'summary': f'Server error: {str(e)}',
+                        'threatScore': 0,
+                        'recommendation': 'Error'
+                    }).encode())
+                except:
+                    pass
+            return
+        
+        # Endpoint: Purge/Reset
+        if self.path == '/purge':
+            print("Command received: Purge Kismet Data")
+            try:
+                # Make script executable and run it
+                os.system("chmod +x ./clean_kismet.sh")
+                os.system("./clean_kismet.sh")
+                
+                self.send_response(200)
+                self._set_headers()
+                self.wfile.write(json.dumps({'status': 'executed', 'message': 'Purge command received'}).encode())
+            except (BrokenPipeError, ConnectionResetError):
                 pass
-        return
-    
-    # Endpoint: Purge/Reset
-    if self.path == '/purge':
-        print("Command received: Purge Kismet Data")
-        try:
-            self.send_response(200)
-            self._set_headers()
-            self.wfile.write(json.dumps({'status': 'executed', 'message': 'Purge command received'}).encode())
-        except (BrokenPipeError, ConnectionResetError):
-            pass
-        return
-    
-    self.send_response(404)
-    self.end_headers()
+            return
+        
+        self.send_response(404)
+        self.end_headers()
 
 if __name__ == "__main__":
     # Allow the port to be reused immediately after restart
