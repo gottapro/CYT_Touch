@@ -52,8 +52,8 @@ Respond ONLY with valid JSON in this format:
 """
         
         # Call Gemini API
-        # Use the latest stable Pro model for best intelligence
-        url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent'
+        # User requested model
+        url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
         headers = {
             'Content-Type': 'application/json',
             'x-goog-api-key': GEMINI_API_KEY
