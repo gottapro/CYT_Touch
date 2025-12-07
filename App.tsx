@@ -560,7 +560,6 @@ const parseBackendData = (data: any): WifiDevice[] => {
   };
 
   const handleAnalyze = async (device: WifiDevice) => {
-    if (analyzing) return; // Prevent double-taps
     setSelectedDevice(device);
     setAnalysisModalOpen(true);
     setAnalyzing(true);
@@ -730,7 +729,6 @@ const parseBackendData = (data: any): WifiDevice[] => {
                 onToggleIgnore={handleToggleIgnore}
                 onToggleTrack={handleToggleTrack}
                 onAnalyze={handleAnalyze}
-                isAnalyzing={analyzing}
               />
             ))
           )}

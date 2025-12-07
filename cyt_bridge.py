@@ -6,7 +6,6 @@ import json
 import os
 import sys
 import traceback
-import time
 
 # Load API key from environment or file
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
@@ -53,7 +52,7 @@ Respond ONLY with valid JSON in this format:
 """
         
         # Call Gemini API
-        url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent'
+        url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent'
         headers = {
             'Content-Type': 'application/json',
             'x-goog-api-key': GEMINI_API_KEY
@@ -76,40 +75,21 @@ Respond ONLY with valid JSON in this format:
             method='POST'
         )
         
-        # Retry Logic for 429 Too Many Requests
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                with urllib.request.urlopen(req, timeout=15) as response:
-                    result = json.loads(response.read())
-                    text = result['candidates'][0]['content']['parts'][0]['text']
-                    
-                    # Extract JSON from response
-                    import re
-                    json_match = re.search(r'\{.*\}', text, re.DOTALL)
-                    if json_match:
-                        return json.loads(json_match.group())
-                    
-                    return {
-                        'summary': text[:200],
-                        'threatScore': 50,
-                        'recommendation': 'Monitor'
-                    }
-            except urllib.error.HTTPError as e:
-                if e.code == 429:
-                    if attempt < max_retries - 1:
-                        wait_time = (attempt + 1) * 2  # Exponential backoff: 2s, 4s, 6s
-                        print(f"Rate limit hit (429). Retrying in {wait_time}s...")
-                        time.sleep(wait_time)
-                        continue
-                    else:
-                        return {
-                            'summary': 'Rate limit exceeded. Please wait a moment.',
-                            'threatScore': 0,
-                            'recommendation': 'Retry Later'
-                        }
-                else:
-                    raise e # Re-raise other HTTP errors
+        with urllib.request.urlopen(req, timeout=15) as response:
+            result = json.loads(response.read())
+            text = result['candidates'][0]['content']['parts'][0]['text']
+            
+            # Extract JSON from response
+            import re
+            json_match = re.search(r'\{.*\}', text, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group())
+            
+            return {
+                'summary': text[:200],
+                'threatScore': 50,
+                'recommendation': 'Monitor'
+            }
             
     except Exception as e:
         print(f"Gemini API Error: {e}")
