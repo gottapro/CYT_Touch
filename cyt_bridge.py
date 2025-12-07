@@ -17,7 +17,7 @@ if not GEMINI_API_KEY and os.path.exists('.env'):
                 break
 
 def analyze_device_with_gemini(device_data):
-    """Call Gemini API server-side with correct model name"""
+    """Call Gemini API with fallback to multiple API versions"""
     print(f"\n{'='*60}")
     print(f"[DEBUG] Starting analysis for device: {device_data.get('mac')}")
     
@@ -31,12 +31,11 @@ def analyze_device_with_gemini(device_data):
     
     print(f"[DEBUG] API Key present: {GEMINI_API_KEY[:8]}...")
     
-    try:
-        # Construct prompt
-        probed_ssids = device_data.get('probedSSIDs', [])
-        probed_str = ', '.join(probed_ssids) if probed_ssids else 'None'
-        
-        prompt = f"""Analyze this WiFi device for security threats:
+    # Construct prompt
+    probed_ssids = device_data.get('probedSSIDs', [])
+    probed_str = ', '.join(probed_ssids) if probed_ssids else 'None'
+    
+    prompt = f"""Analyze this WiFi device for security threats:
 
 MAC: {device_data.get('mac', 'Unknown')}
 Vendor: {device_data.get('vendor', 'Unknown')}
@@ -48,155 +47,145 @@ Probed SSIDs: {probed_str}
 
 Provide a brief security analysis. Respond with JSON only (no markdown):
 {{"summary": "brief analysis", "threatScore": 0, "recommendation": "Ignore"}}"""
-        
-        print(f"[DEBUG] Prompt created")
-        
-        # FIXED: Use correct model name for v1beta API
-        # Available models: gemini-1.5-pro, gemini-1.5-flash-latest, gemini-pro
-        url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent'
-        
-        payload = {
-            'contents': [{
-                'parts': [{'text': prompt}]
-            }],
-            'generationConfig': {
-                'temperature': 0.7,
-                'maxOutputTokens': 500
-            }
-        }
-        
-        print(f"[DEBUG] Calling API: {url}")
-        
-        req = urllib.request.Request(
-            f"{url}?key={GEMINI_API_KEY}",
-            data=json.dumps(payload).encode('utf-8'),
-            headers={'Content-Type': 'application/json'},
-            method='POST'
-        )
-        
-        with urllib.request.urlopen(req, timeout=15) as response:
-            response_text = response.read().decode('utf-8')
-            print(f"[DEBUG] Response received ({len(response_text)} bytes)")
-            
-            result = json.loads(response_text)
-            
-            # Navigate the response structure safely
-            if 'candidates' not in result or len(result['candidates']) == 0:
-                print(f"[ERROR] No candidates in response")
-                return {
-                    'summary': 'API returned no response',
-                    'threatScore': 0,
-                    'recommendation': 'Error'
-                }
-            
-            candidate = result['candidates'][0]
-            
-            # Check for content blocking
-            if 'content' not in candidate:
-                # Check if it was blocked
-                if 'finishReason' in candidate:
-                    reason = candidate['finishReason']
-                    print(f"[WARN] Response blocked: {reason}")
-                    return {
-                        'summary': f'Response blocked by safety filters: {reason}',
-                        'threatScore': 0,
-                        'recommendation': 'Unable to analyze'
-                    }
-                print(f"[ERROR] No content in candidate")
-                return {
-                    'summary': 'API candidate has no content',
-                    'threatScore': 0,
-                    'recommendation': 'Error'
-                }
-            
-            content = candidate['content']
-            
-            if 'parts' not in content or len(content['parts']) == 0:
-                print(f"[ERROR] No parts in content")
-                return {
-                    'summary': 'API content has no parts',
-                    'threatScore': 0,
-                    'recommendation': 'Error'
-                }
-            
-            text = content['parts'][0].get('text', '')
-            print(f"[DEBUG] Text received: {text[:200]}...")
-            
-            # Clean up the response
-            import re
-            text = text.strip()
-            text = re.sub(r'^```json\s*', '', text)
-            text = re.sub(r'^```\s*', '', text)
-            text = re.sub(r'\s*```$', '', text)
-            text = text.strip()
-            
-            # Parse JSON
-            try:
-                parsed = json.loads(text)
-                print(f"[DEBUG] Successfully parsed JSON")
-                
-                # Ensure all required keys exist with defaults
-                result = {
-                    'summary': str(parsed.get('summary', 'Analysis completed'))[:500],
-                    'threatScore': int(parsed.get('threatScore', 50)),
-                    'recommendation': str(parsed.get('recommendation', 'Monitor'))
-                }
-                
-                print(f"[DEBUG] Returning: {result}")
-                print(f"{'='*60}\n")
-                return result
-                
-            except json.JSONDecodeError:
-                print(f"[WARN] Could not parse JSON, using text as summary")
-                # Try to extract JSON with regex
-                json_match = re.search(r'\{[^{}]*"summary"[^{}]*\}', text)
-                if json_match:
-                    try:
-                        return json.loads(json_match.group())
-                    except:
-                        pass
-                
-                # Fallback: use the text
-                return {
-                    'summary': text[:200] if text else 'No analysis text',
-                    'threatScore': 50,
-                    'recommendation': 'Monitor'
-                }
     
-    except urllib.error.HTTPError as e:
-        print(f"\n[ERROR] HTTP Error {e.code}")
+    # Try multiple API endpoints in order of preference
+    api_endpoints = [
+        'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
+        'https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
+    ]
+    
+    payload = {
+        'contents': [{
+            'parts': [{'text': prompt}]
+        }],
+        'generationConfig': {
+            'temperature': 0.7,
+            'maxOutputTokens': 500
+        }
+    }
+    
+    last_error = None
+    
+    for url in api_endpoints:
         try:
-            error_body = e.read().decode('utf-8')
-            print(f"[ERROR] Error details: {error_body}")
-        except:
-            pass
+            print(f"[DEBUG] Trying: {url}")
+            
+            req = urllib.request.Request(
+                f"{url}?key={GEMINI_API_KEY}",
+                data=json.dumps(payload).encode('utf-8'),
+                headers={'Content-Type': 'application/json'},
+                method='POST'
+            )
+            
+            with urllib.request.urlopen(req, timeout=15) as response:
+                response_text = response.read().decode('utf-8')
+                print(f"[DEBUG] ✓ Success with {url.split('/')[5]}")
+                
+                result = json.loads(response_text)
+                
+                # Navigate the response structure safely
+                if 'candidates' not in result or len(result['candidates']) == 0:
+                    print(f"[WARN] No candidates in response, trying next endpoint")
+                    continue
+                
+                candidate = result['candidates'][0]
+                
+                # Check for content blocking
+                if 'content' not in candidate:
+                    if 'finishReason' in candidate:
+                        reason = candidate['finishReason']
+                        print(f"[WARN] Response blocked: {reason}")
+                        return {
+                            'summary': f'Content blocked: {reason}',
+                            'threatScore': 0,
+                            'recommendation': 'Unable to analyze'
+                        }
+                    print(f"[WARN] No content in candidate, trying next endpoint")
+                    continue
+                
+                content = candidate['content']
+                
+                if 'parts' not in content or len(content['parts']) == 0:
+                    print(f"[WARN] No parts in content, trying next endpoint")
+                    continue
+                
+                text = content['parts'][0].get('text', '')
+                print(f"[DEBUG] Text received: {text[:100]}...")
+                
+                # Clean up the response
+                import re
+                text = text.strip()
+                text = re.sub(r'^```json\s*', '', text)
+                text = re.sub(r'^```\s*', '', text)
+                text = re.sub(r'\s*```$', '', text)
+                text = text.strip()
+                
+                # Parse JSON
+                try:
+                    parsed = json.loads(text)
+                    print(f"[DEBUG] ✓ Successfully parsed JSON")
+                    
+                    result = {
+                        'summary': str(parsed.get('summary', 'Analysis completed'))[:500],
+                        'threatScore': int(parsed.get('threatScore', 50)),
+                        'recommendation': str(parsed.get('recommendation', 'Monitor'))
+                    }
+                    
+                    print(f"[DEBUG] Returning: {result['summary'][:50]}...")
+                    print(f"{'='*60}\n")
+                    return result
+                    
+                except json.JSONDecodeError:
+                    print(f"[WARN] Could not parse JSON, using text as summary")
+                    # Try to extract JSON with regex
+                    json_match = re.search(r'\{[^{}]*"summary"[^{}]*\}', text)
+                    if json_match:
+                        try:
+                            return json.loads(json_match.group())
+                        except:
+                            pass
+                    
+                    # Fallback: use the text
+                    return {
+                        'summary': text[:200] if text else 'No analysis text',
+                        'threatScore': 50,
+                        'recommendation': 'Monitor'
+                    }
         
-        error_map = {
-            400: 'Invalid request format',
-            401: 'API key invalid',
-            403: 'API access forbidden',
-            404: 'Model not found',
-            429: 'Rate limit exceeded (wait 60s)',
-            500: 'Gemini server error',
-            503: 'Service unavailable'
-        }
+        except urllib.error.HTTPError as e:
+            print(f"[WARN] {url.split('/')[5]} returned HTTP {e.code}")
+            if e.code == 404:
+                # Model not found, try next one
+                last_error = e
+                continue
+            elif e.code == 429:
+                # Rate limit - don't try other endpoints
+                return {
+                    'summary': 'Rate limit exceeded (wait 60s)',
+                    'threatScore': 0,
+                    'recommendation': 'Wait'
+                }
+            else:
+                last_error = e
+                continue
         
-        return {
-            'summary': error_map.get(e.code, f'HTTP {e.code} error'),
-            'threatScore': 0,
-            'recommendation': 'Error'
-        }
+        except Exception as e:
+            print(f"[WARN] Error with endpoint: {type(e).__name__}")
+            last_error = e
+            continue
     
-    except Exception as e:
-        print(f"\n[ERROR] {type(e).__name__}: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        
-        return {
-            'summary': f'Analysis failed: {type(e).__name__}',
-            'threatScore': 0,
-            'recommendation': 'Error'
-        }
+    # If we get here, all endpoints failed
+    print(f"[ERROR] All API endpoints failed")
+    if last_error:
+        print(f"[ERROR] Last error: {last_error}")
+    
+    return {
+        'summary': 'All Gemini API endpoints failed. Check API key and network.',
+        'threatScore': 0,
+        'recommendation': 'Error'
+    }
 
 
 # Configuration
