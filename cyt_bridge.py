@@ -17,10 +17,9 @@ if not GEMINI_API_KEY and os.path.exists('.env'):
                 break
 
 def analyze_device_with_gemini(device_data):
-    """Call Gemini API server-side with detailed debugging"""
+    """Call Gemini API server-side with correct model name"""
     print(f"\n{'='*60}")
     print(f"[DEBUG] Starting analysis for device: {device_data.get('mac')}")
-    print(f"[DEBUG] Device data received: {json.dumps(device_data, indent=2)}")
     
     if not GEMINI_API_KEY:
         print("[ERROR] No API key found!")
@@ -47,13 +46,14 @@ Type: {device_data.get('type', 'Unknown')}
 Persistence: {int(device_data.get('persistenceScore', 0) * 100)}%
 Probed SSIDs: {probed_str}
 
-Respond with JSON only:
+Provide a brief security analysis. Respond with JSON only (no markdown):
 {{"summary": "brief analysis", "threatScore": 0, "recommendation": "Ignore"}}"""
         
-        print(f"[DEBUG] Prompt created, length: {len(prompt)} chars")
+        print(f"[DEBUG] Prompt created")
         
-        # API endpoint - using the most stable model
-        url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent'
+        # FIXED: Use correct model name for v1beta API
+        # Available models: gemini-1.5-pro, gemini-1.5-flash-latest, gemini-pro
+        url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent'
         
         payload = {
             'contents': [{
@@ -65,7 +65,6 @@ Respond with JSON only:
             }
         }
         
-        print(f"[DEBUG] Payload created: {json.dumps(payload, indent=2)}")
         print(f"[DEBUG] Calling API: {url}")
         
         req = urllib.request.Request(
@@ -77,41 +76,33 @@ Respond with JSON only:
         
         with urllib.request.urlopen(req, timeout=15) as response:
             response_text = response.read().decode('utf-8')
-            print(f"[DEBUG] Raw response received ({len(response_text)} bytes)")
-            print(f"[DEBUG] Response text: {response_text[:500]}...")
+            print(f"[DEBUG] Response received ({len(response_text)} bytes)")
             
             result = json.loads(response_text)
-            print(f"[DEBUG] Parsed JSON successfully")
-            print(f"[DEBUG] Result keys: {list(result.keys())}")
             
-            # Check if we have candidates
-            if 'candidates' not in result:
-                print(f"[ERROR] No 'candidates' in response!")
-                print(f"[ERROR] Full result: {json.dumps(result, indent=2)}")
+            # Navigate the response structure safely
+            if 'candidates' not in result or len(result['candidates']) == 0:
+                print(f"[ERROR] No candidates in response")
                 return {
-                    'summary': 'API returned unexpected format (no candidates)',
+                    'summary': 'API returned no response',
                     'threatScore': 0,
                     'recommendation': 'Error'
                 }
             
-            candidates = result['candidates']
-            print(f"[DEBUG] Number of candidates: {len(candidates)}")
+            candidate = result['candidates'][0]
             
-            if len(candidates) == 0:
-                print(f"[ERROR] Empty candidates array!")
-                return {
-                    'summary': 'API returned no candidates',
-                    'threatScore': 0,
-                    'recommendation': 'Error'
-                }
-            
-            candidate = candidates[0]
-            print(f"[DEBUG] First candidate keys: {list(candidate.keys())}")
-            
-            # Extract content
+            # Check for content blocking
             if 'content' not in candidate:
-                print(f"[ERROR] No 'content' in candidate!")
-                print(f"[ERROR] Candidate: {json.dumps(candidate, indent=2)}")
+                # Check if it was blocked
+                if 'finishReason' in candidate:
+                    reason = candidate['finishReason']
+                    print(f"[WARN] Response blocked: {reason}")
+                    return {
+                        'summary': f'Response blocked by safety filters: {reason}',
+                        'threatScore': 0,
+                        'recommendation': 'Unable to analyze'
+                    }
+                print(f"[ERROR] No content in candidate")
                 return {
                     'summary': 'API candidate has no content',
                     'threatScore': 0,
@@ -119,89 +110,55 @@ Respond with JSON only:
                 }
             
             content = candidate['content']
-            print(f"[DEBUG] Content keys: {list(content.keys())}")
             
-            if 'parts' not in content:
-                print(f"[ERROR] No 'parts' in content!")
-                print(f"[ERROR] Content: {json.dumps(content, indent=2)}")
+            if 'parts' not in content or len(content['parts']) == 0:
+                print(f"[ERROR] No parts in content")
                 return {
                     'summary': 'API content has no parts',
                     'threatScore': 0,
                     'recommendation': 'Error'
                 }
             
-            parts = content['parts']
-            print(f"[DEBUG] Number of parts: {len(parts)}")
+            text = content['parts'][0].get('text', '')
+            print(f"[DEBUG] Text received: {text[:200]}...")
             
-            if len(parts) == 0:
-                print(f"[ERROR] Empty parts array!")
-                return {
-                    'summary': 'API returned no text parts',
-                    'threatScore': 0,
-                    'recommendation': 'Error'
-                }
-            
-            first_part = parts[0]
-            print(f"[DEBUG] First part keys: {list(first_part.keys())}")
-            
-            if 'text' not in first_part:
-                print(f"[ERROR] No 'text' in first part!")
-                print(f"[ERROR] Part: {json.dumps(first_part, indent=2)}")
-                return {
-                    'summary': 'API part has no text',
-                    'threatScore': 0,
-                    'recommendation': 'Error'
-                }
-            
-            text = first_part['text']
-            print(f"[DEBUG] Text received ({len(text)} chars): {text[:200]}...")
-            
-            # Clean up text
-            text = text.strip()
-            
-            # Remove markdown code fences if present
+            # Clean up the response
             import re
+            text = text.strip()
             text = re.sub(r'^```json\s*', '', text)
             text = re.sub(r'^```\s*', '', text)
             text = re.sub(r'\s*```$', '', text)
             text = text.strip()
             
-            print(f"[DEBUG] Cleaned text: {text[:200]}...")
-            
-            # Try to parse as JSON
+            # Parse JSON
             try:
                 parsed = json.loads(text)
                 print(f"[DEBUG] Successfully parsed JSON")
-                print(f"[DEBUG] Parsed keys: {list(parsed.keys())}")
                 
-                # Ensure all required keys exist
+                # Ensure all required keys exist with defaults
                 result = {
-                    'summary': str(parsed.get('summary', 'No summary provided'))[:500],
+                    'summary': str(parsed.get('summary', 'Analysis completed'))[:500],
                     'threatScore': int(parsed.get('threatScore', 50)),
                     'recommendation': str(parsed.get('recommendation', 'Monitor'))
                 }
                 
-                print(f"[DEBUG] Returning result: {json.dumps(result, indent=2)}")
+                print(f"[DEBUG] Returning: {result}")
                 print(f"{'='*60}\n")
                 return result
                 
-            except json.JSONDecodeError as je:
-                print(f"[ERROR] JSON decode error: {je}")
-                print(f"[ERROR] Failed to parse: {text}")
-                
-                # Try to extract JSON from text with regex
+            except json.JSONDecodeError:
+                print(f"[WARN] Could not parse JSON, using text as summary")
+                # Try to extract JSON with regex
                 json_match = re.search(r'\{[^{}]*"summary"[^{}]*\}', text)
                 if json_match:
-                    print(f"[DEBUG] Found JSON with regex")
                     try:
                         return json.loads(json_match.group())
                     except:
                         pass
                 
-                # Last resort: return the text as summary
-                print(f"[WARN] Using text as summary fallback")
+                # Fallback: use the text
                 return {
-                    'summary': text[:200] if text else 'Empty response',
+                    'summary': text[:200] if text else 'No analysis text',
                     'threatScore': 50,
                     'recommendation': 'Monitor'
                 }
@@ -210,39 +167,28 @@ Respond with JSON only:
         print(f"\n[ERROR] HTTP Error {e.code}")
         try:
             error_body = e.read().decode('utf-8')
-            print(f"[ERROR] Error body: {error_body}")
+            print(f"[ERROR] Error details: {error_body}")
         except:
-            print(f"[ERROR] Could not read error body")
+            pass
         
-        error_messages = {
-            400: 'Bad request to Gemini API',
+        error_map = {
+            400: 'Invalid request format',
             401: 'API key invalid',
-            403: 'API key unauthorized',
+            403: 'API access forbidden',
+            404: 'Model not found',
             429: 'Rate limit exceeded (wait 60s)',
-            500: 'Gemini API server error',
-            503: 'Gemini API unavailable'
+            500: 'Gemini server error',
+            503: 'Service unavailable'
         }
         
         return {
-            'summary': error_messages.get(e.code, f'HTTP {e.code} error'),
-            'threatScore': 0,
-            'recommendation': 'Error'
-        }
-    
-    except AttributeError as ae:
-        print(f"\n[ERROR] AttributeError: {ae}")
-        print(f"[ERROR] This usually means trying to access a property that doesn't exist")
-        import traceback
-        traceback.print_exc()
-        
-        return {
-            'summary': f'AttributeError: {str(ae)}',
+            'summary': error_map.get(e.code, f'HTTP {e.code} error'),
             'threatScore': 0,
             'recommendation': 'Error'
         }
     
     except Exception as e:
-        print(f"\n[ERROR] Unexpected error: {type(e).__name__}: {str(e)}")
+        print(f"\n[ERROR] {type(e).__name__}: {str(e)}")
         import traceback
         traceback.print_exc()
         
