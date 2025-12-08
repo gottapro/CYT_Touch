@@ -1,5 +1,5 @@
 import React from 'react';
-import { Wifi, ShieldAlert, ShieldCheck, Eye, EyeOff, Activity, Bluetooth, Globe, MapPin, Search, Link, Router } from 'lucide-react';
+import { Wifi, ShieldAlert, ShieldCheck, Activity, Bluetooth, Globe, MapPin, Search, Link, Router, Crosshair } from 'lucide-react';
 import { WifiDevice, ThreatLevel, DeviceType } from '../types';
 
 interface DeviceCardProps {
@@ -175,7 +175,7 @@ export const DeviceCard = React.memo<DeviceCardProps>(({ device, onToggleIgnore,
           onClick={() => onToggleTrack(device.mac)}
           className={`flex-1 py-3.5 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition-colors ${device.isTracked ? 'bg-cyt-red text-white shadow-lg shadow-red-900/20' : 'bg-slate-700 text-slate-300 active:bg-slate-600'}`}
         >
-          {device.isTracked ? <Eye size={20} /> : <EyeOff size={20} />}
+          <Crosshair size={20} />
           {device.isTracked ? 'CHASING' : 'Chase'}
         </button>
         

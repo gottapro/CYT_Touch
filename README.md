@@ -31,7 +31,7 @@ CYT Touch is a professional-grade, touch-optimized interface for real-time wirel
 ### 🔎 Advanced Filtering & Sorting (New in v1.2)
 *   **Deep Search:** Instantly find devices by MAC, Vendor, SSID, or even *Probed Networks*.
 *   **Tail All:** One-tap "Stealth Mode" to ignore all currently visible non-threats, clearing the deck to focus on new arrivals.
-*   **Dynamic Sort:** Cycle through sorting by **Last Seen**, **Signal Strength (RSSI)**, or **Threat Level** to prioritize your view.
+*   **Dynamic Sort:** Cycle through sorting by **Time (Activity)**, **Signal Strength (RSSI)**, or **Newest (Discovery)** to prioritize your view.
 
 ### 🤖 AI-Powered Analysis
 *   **Deep Profiling:** Integrates **Google Gemini AI** to analyze device signatures.
@@ -107,9 +107,9 @@ Use the included launcher script to start the Python Bridge (Port 5000) and Web 
 *Access the dashboard at `http://<PI_IP>:3000` on your phone or tablet.*
 
 ### 2. The Workflow ("The Hunt")
-1.  **Sanitize:** Tap **Tail All** (Eye Off Icon) to ignore current safe traffic, or tap **TAIL** on individual devices.
+1.  **Sanitize:** Tap **Tail All** (Shield Icon) to ignore current safe traffic, or tap **TAIL** on individual devices.
 2.  **Scan:** Watch the **"Nearby"** list. Devices probing for networks will reveal their intentions.
-3.  **Sort & Search:** Use the new **Sort** button to cycle through display orders (Time, Signal, Threat) and the search bar to filter by MAC, Vendor, SSID, or Probes.
+3.  **Sort & Search:** Use the new **Sort** button to cycle through display orders (Time, Signal, Newest) and the search bar to filter by MAC, Vendor, SSID, or Probes.
 4.  **Red Alert!** If a **High Threat** device comes into close proximity (-65dBm), a full-screen Red Alert will trigger. Respond by Tapping "ENGAGE" to track or "DISMISS".
 5.  **Move:** As you travel, the **Smart Logic** will monitor for persistent signals.
     *   **Yellow Border:** Device is lingering (>15 mins).
