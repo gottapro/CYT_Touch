@@ -872,17 +872,15 @@ const parseBackendData = (data: any): WifiDevice[] => {
             </button>
             
             <button 
-              className="flex-none w-20 bg-slate-800 text-slate-300 rounded-2xl flex items-center justify-center border border-slate-700 active:bg-slate-700 active:scale-95 transition-all relative group"
+              className="flex-none w-20 bg-slate-800 text-slate-300 rounded-2xl flex items-center justify-center border border-slate-700 active:bg-slate-700 active:scale-95 transition-all"
               onClick={() => setSortOrder(prev => {
                 if (prev === 'lastSeen') return 'rssi';
                 if (prev === 'rssi') return 'firstSeen';
                 return 'lastSeen';
               })}
+              title={`Sort: ${sortOrder === 'lastSeen' ? 'Activity' : sortOrder === 'rssi' ? 'Signal' : 'Age'}`}
             >
               <ArrowUpDown size={28} />
-              <div className="absolute -top-12 left-1/2 -translate-x-1/2 px-2 py-1 bg-slate-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none border border-slate-700">
-                Sort: {sortOrder === 'lastSeen' ? 'Activity' : sortOrder === 'rssi' ? 'Signal' : 'Age'}
-              </div>
             </button>
 
             <button 
