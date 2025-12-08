@@ -878,11 +878,10 @@ const parseBackendData = (data: any): WifiDevice[] => {
                 if (prev === 'rssi') return 'firstSeen';
                 return 'lastSeen';
               })}
-              title={`Sort: ${sortOrder === 'lastSeen' ? 'Time' : sortOrder === 'rssi' ? 'Signal' : 'Newest'}`}
             >
               <ArrowUpDown size={28} />
               <div className="absolute -top-12 left-1/2 -translate-x-1/2 px-2 py-1 bg-slate-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none border border-slate-700">
-                Sort: {sortOrder === 'lastSeen' ? 'Time' : sortOrder === 'rssi' ? 'Signal' : 'Newest'}
+                Sort: {sortOrder === 'lastSeen' ? 'Activity' : sortOrder === 'rssi' ? 'Signal' : 'Age'}
               </div>
             </button>
 
