@@ -1,4 +1,4 @@
-# CYT Touch (v1.1.0)
+# CYT Touch (v1.2.0)
 
 **Tactical Signals Intelligence (SIGINT) Dashboard**
 
@@ -18,10 +18,20 @@ CYT Touch is a professional-grade, touch-optimized interface for real-time wirel
 *   **Movement Correlation:** Elevates threats to **"Chasing"** status *only* if they follow you across significant distances (>500m), filtering out stationary neighbors.
 *   **GPS History:** Records a breadcrumb trail of coordinates for every device to visualize its movement path relative to yours.
 
+### 💾 Session Persistence & Statistics (New in v1.2)
+*   **Auto-Save:** Continuously saves your device list to a local database (IndexedDB), ensuring you never lose tracking data if the browser refreshes or the Pi reboots.
+*   **Session History:** Tracks scan duration and device counts across multiple sessions.
+*   **Statistics Dashboard:** View total unique devices seen, tracking history, and session longevity.
+
 ### 🚨 Red Alert Proximity Warning
 *   **Immediate Threat Detection:** Triggers a **full-screen, pulsing red overlay** when a known "High Threat" device (e.g., Flipper Zero, WiFi Pineapple) comes within close proximity (Signal > -65dBm).
 *   **Haptic Feedback:** Vibrates mobile devices to alert you even if the screen is not in focus.
 *   **Tactical Options:** One-tap "ENGAGE" button to immediately lock tracking on the target.
+
+### 🔎 Advanced Filtering & Sorting (New in v1.2)
+*   **Deep Search:** Instantly find devices by MAC, Vendor, SSID, or even *Probed Networks*.
+*   **Tail All:** One-tap "Stealth Mode" to ignore all currently visible non-threats, clearing the deck to focus on new arrivals.
+*   **Dynamic Sort:** Cycle through sorting by **Last Seen**, **Signal Strength (RSSI)**, or **Threat Level** to prioritize your view.
 
 ### 🤖 AI-Powered Analysis
 *   **Deep Profiling:** Integrates **Google Gemini AI** to analyze device signatures.
@@ -97,18 +107,20 @@ Use the included launcher script to start the Python Bridge (Port 5000) and Web 
 *Access the dashboard at `http://<PI_IP>:3000` on your phone or tablet.*
 
 ### 2. The Workflow ("The Hunt")
-1.  **Sanitize:** Tap **TAIL** (Shield Icon) on known friendly devices (your phone, home router) to ignore them.
+1.  **Sanitize:** Tap **Tail All** (Eye Off Icon) to ignore current safe traffic, or tap **TAIL** on individual devices.
 2.  **Scan:** Watch the **"Nearby"** list. Devices probing for networks will reveal their intentions.
-3.  **Red Alert!** If a **High Threat** device comes into close proximity (-65dBm), a full-screen Red Alert will trigger. Respond by Tapping "ENGAGE" to track or "DISMISS".
-4.  **Move:** As you travel, the **Smart Logic** will monitor for persistent signals.
+3.  **Sort & Search:** Use the new **Sort** button to cycle through display orders (Time, Signal, Threat) and the search bar to filter by MAC, Vendor, SSID, or Probes.
+4.  **Red Alert!** If a **High Threat** device comes into close proximity (-65dBm), a full-screen Red Alert will trigger. Respond by Tapping "ENGAGE" to track or "DISMISS".
+5.  **Move:** As you travel, the **Smart Logic** will monitor for persistent signals.
     *   **Yellow Border:** Device is lingering (>15 mins).
     *   **Red Border/Eye Icon:** Device is **Chasing** (lingering + moving >500m with you).
-5.  **Analyze:** Tap the **Activity Pulse** icon on a suspicious device to run an AI threat assessment.
-5.  **Export:** 
+6.  **Analyze:** Tap the **Activity Pulse** icon on a suspicious device to run an AI threat assessment.
+7.  **Review Stats:** Check the **Database** icon to see session longevity and total tracked devices.
+8.  **Export:** 
     *   Go to **Settings**.
     *   Tap **Download KML Map** for Google Earth analysis.
     *   Tap **Report (MD)** for a text summary.
-6.  **Reset:**
+9.  **Reset:**
     *   Use **Purge Kismet DB** in Settings to wipe the underlying database and restart the Kismet service. This is recommended when moving to a completely new physical location to ensure your "Stalker Logic" starts fresh.
 
 ---
@@ -117,10 +129,11 @@ Use the included launcher script to start the Python Bridge (Port 5000) and Web 
 
 *   **Frontend:** React + Vite + TailwindCSS (Touch-Optimized).
 *   **Backend:** Python Bridge (`cyt_bridge.py`) - Proxies Kismet API, filters fields, streams JSON.
+*   **Persistence:** IndexedDB (Client-side storage).
 *   **Data Source:** Kismet (local instance).
 
 ### Performance Tuning
-*   **Refresh Rate:** Defaults to **2000ms** (2s). Auto-scales to **8000ms** (8s) under heavy load.
+*   **Refresh Rate:** Defaults to **8000ms** (8s) for stability.
 *   **Timeouts:** 25s grace period for large Kismet payloads.
 
 ---

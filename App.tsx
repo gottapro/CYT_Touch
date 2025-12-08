@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Radar, Settings, Play, Square, Search, AlertCircle, RefreshCw, HelpCircle, Thermometer, EyeOff, Database } from 'lucide-react';
+import { Radar, Settings, Play, Square, Search, AlertCircle, RefreshCw, HelpCircle, Thermometer, EyeOff, Database, ArrowUpDown } from 'lucide-react';
 import { WifiDevice, DeviceType, ThreatLevel, AnalysisResult, AppSettings, GPSCoordinate } from './types';
 import { DeviceCard } from './components/DeviceCard';
 import { AnalysisModal } from './components/AnalysisModal';
@@ -112,6 +112,7 @@ const App: React.FC = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [devices, setDevices] = useState<WifiDevice[]>([]);
   const [filter, setFilter] = useState<'all' | 'tracked' | 'ignored'>('all');
+  const [sortOrder, setSortOrder] = useState<'lastSeen' | 'rssi' | 'threatLevel'>('lastSeen');
   const [searchTerm, setSearchTerm] = useState('');
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'error' | 'idle'>('idle');
   const [cpuTemp, setCpuTemp] = useState<number | null>(null);
@@ -691,6 +692,20 @@ const parseBackendData = (data: any): WifiDevice[] => {
   }
 
   return true;
+}).sort((a, b) => {
+  if (sortOrder === 'rssi') return b.rssi - a.rssi;
+  if (sortOrder === 'threatLevel') {
+    const score = (t: ThreatLevel) => {
+      switch (t) {
+        case ThreatLevel.HIGH: return 3;
+        case ThreatLevel.SUSPICIOUS: return 2;
+        case ThreatLevel.UNKNOWN: return 1;
+        default: return 0;
+      }
+    };
+    return score(b.threatLevel) - score(a.threatLevel);
+  }
+  return b.lastSeen - a.lastSeen;
 });
 
   return (
@@ -850,6 +865,7 @@ const parseBackendData = (data: any): WifiDevice[] => {
          <div className="max-w-3xl mx-auto flex gap-4">
             <button 
               onClick={toggleScan}
+              title={isScanning ? "Stop Scan" : "Start Scan"}
               className={`flex-1 py-4 rounded-2xl font-bold text-xl flex items-center justify-center gap-3 shadow-lg transition-all active:scale-95 ${isScanning ? 'bg-red-500 hover:bg-red-600 text-white shadow-red-900/20' : 'bg-cyt-green hover:bg-green-600 text-white shadow-green-900/20'}`}
             >
               {isScanning ? (
@@ -866,9 +882,25 @@ const parseBackendData = (data: any): WifiDevice[] => {
             </button>
             
             <button 
+              className="flex-none w-20 bg-slate-800 text-slate-300 rounded-2xl flex items-center justify-center border border-slate-700 active:bg-slate-700 active:scale-95 transition-all relative group"
+              onClick={() => setSortOrder(prev => {
+                if (prev === 'lastSeen') return 'rssi';
+                if (prev === 'rssi') return 'threatLevel';
+                return 'lastSeen';
+              })}
+              title={`Sort: ${sortOrder === 'lastSeen' ? 'Time' : sortOrder === 'rssi' ? 'Signal' : 'Threat'}`}
+            >
+              <ArrowUpDown size={28} />
+              <div className="absolute -top-12 left-1/2 -translate-x-1/2 px-2 py-1 bg-slate-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none border border-slate-700">
+                Sort: {sortOrder === 'lastSeen' ? 'Time' : sortOrder === 'rssi' ? 'Signal' : 'Threat'}
+              </div>
+            </button>
+
+            <button 
               className="flex-none w-20 bg-slate-800 text-slate-300 rounded-2xl flex items-center justify-center border border-slate-700 active:bg-slate-700 active:scale-95 transition-all"
               onClick={handleTailAll}
               aria-label="Tail All"
+              title="Tail All"
             >
               <EyeOff size={28} />
             </button>
@@ -877,6 +909,7 @@ const parseBackendData = (data: any): WifiDevice[] => {
               className="flex-none w-20 bg-slate-800 text-slate-300 rounded-2xl flex items-center justify-center border border-slate-700 active:bg-slate-700 active:scale-95 transition-all"
               onClick={() => setDevices([])}
               aria-label="Clear List"
+              title="Clear List"
             >
               <RefreshCw size={28} />
             </button>
