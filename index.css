@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: dark;
+  
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* Custom CYT colors */
+@layer utilities {
+  .bg-cyt-red {
+    background-color: #ef4444;
+  }
+  .text-cyt-red {
+    color: #ef4444;
+  }
+  .border-cyt-red {
+    border-color: #ef4444;
+  }
+  .bg-cyt-blue {
+    background-color: #3b82f6;
+  }
+  .text-cyt-blue {
+    color: #3b82f6;
+  }
+  .border-cyt-blue {
+    border-color: #3b82f6;
+  }
+  .bg-cyt-accent {
+    background-color: #06b6d4;
+  }
+  .text-cyt-accent {
+    color: #06b6d4;
+  }
+  .border-cyt-accent {
+    border-color: #06b6d4;
+  }
+}
