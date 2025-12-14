@@ -36,13 +36,20 @@ const KNOWN_THREAT_VENDORS = [
   'Shenzhen'
 ];
 
-const assessThreatLevel = (vendor: string = '', ssid: string = '', rssi: number): ThreatLevel => {
+const KNOWN_TRACKER_VENDORS = ['Tile', 'Apple'];
+
+const assessThreatLevel = (vendor: string = '', ssid: string = '', rssi: number, type?: DeviceType): ThreatLevel => {
   const v = vendor.toLowerCase();
   
   // 1. Critical Threats (Hardware Signatures)
   if (KNOWN_THREAT_VENDORS.some(t => v.includes(t.toLowerCase()))) return ThreatLevel.HIGH;
   
-  // 2. Suspicious Signatures (Hidden high power)
+  // 2. Trackers (Tile, AirTags/Apple BLE)
+  if (type === DeviceType.BLE && KNOWN_TRACKER_VENDORS.some(t => v.includes(t.toLowerCase()))) {
+     return ThreatLevel.SUSPICIOUS;
+  }
+  
+  // 3. Suspicious Signatures (Hidden high power)
   if (!ssid && rssi > -50) return ThreatLevel.SUSPICIOUS;
   
   return ThreatLevel.UNKNOWN;
@@ -63,7 +70,8 @@ const generateRandomDevice = (currentLat: number, currentLng: number): WifiDevic
   
   if (isDrone) { vendor = 'DJI Technology'; ssid = 'Mavic_Pro_Video'; }
 
-  const threatLevel = assessThreatLevel(vendor, ssid, -Math.floor(Math.random() * 60) - 30);
+  const type = isBluetooth ? DeviceType.BLE : (isDrone ? DeviceType.DRONE : DeviceType.STATION);
+  const threatLevel = assessThreatLevel(vendor, ssid, -Math.floor(Math.random() * 60) - 30, type);
   
   // Generate random probes
   const probedSSIDs = [];
@@ -471,7 +479,7 @@ const parseBackendData = (data: any): WifiDevice[] => {
         lastSeen: lastSeen,
         vendor: manuf,
         type: type,
-        threatLevel: assessThreatLevel(manuf, name, rssi),
+        threatLevel: assessThreatLevel(manuf, name, rssi, type),
         isIgnored: false,
         isTracked: false,
         probedSSIDs: probedSSIDs,
