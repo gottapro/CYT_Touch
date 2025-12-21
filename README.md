@@ -38,6 +38,49 @@ CYT Touch is a professional-grade, touch-optimized interface for real-time wirel
 ### 🤖 AI-Powered Analysis
 *   **Deep Profiling:** Integrates **Google Gemini AI** to analyze device signatures.
 *   **Probe Analysis:** Feeds the AI a list of **Probed SSIDs** (networks a device is searching for) to detect "Home Base" networks, corporate affiliations, or aggressive surveillance tools.
+
+### 🗺️ Forensic Export & Visualization
+*   **Spectacular KML:** Exports to Google Earth with:
+    *   **Tracking Paths:** `<LineString>` visualization connecting historical GPS points.
+    *   **Rich Balloons:** HTML popups showing full device details and probe lists.
+    *   **Threat Coloring:** Red/Magenta/Green coding based on threat level.
+*   **Surveillance Reports:** Generates professional **Markdown** summaries of all tracked targets for documentation.
+
+---
+
+## 🛠️ Prerequisites
+
+### Hardware
+*   **Raspberry Pi 4 or 5** (Recommended).
+*   **Touchscreen** (7" recommended) or Mobile Device (via browser).
+*   **Wi-Fi Adapter** supporting Monitor Mode.
+*   **GPS Module** (USB/Serial) - Optional but required for tracking logic.
+
+### Software
+*   **OS:** Raspberry Pi OS (Bookworm/Bullseye) or Kali Linux.
+*   **Core:** Kismet, Python 3.11+, Node.js v18+.
+*   **API:** Google Cloud API Key (for Gemini AI features).
+
+---
+
+## 🚀 Installation
+
+1.  **System Setup**
+    ```bash
+    sudo apt update && sudo apt install -y kismet python3 python3-pip nodejs npm
+    # Ensure Kismet is configured and running
+    sudo systemctl enable --now kismet
+    ```
+    
+    **Note:** For the **"Purge Kismet DB"** feature to work, the user running the app must be able to run `sudo systemctl` commands without a password. 
+    To configure this:
+    ```bash
+    sudo visudo
+    # Add the following line at the end (replace 'pi' with your username):
+    pi ALL=(ALL) NOPASSWD: /usr/bin/systemctl start kismet, /usr/bin/systemctl stop kismet
+    ```
+
+2.  **Clone Repository**
     ```bash
     git clone https://github.com/gottapro/CYT_Touch.git
     cd CYT_Touch
