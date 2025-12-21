@@ -1,5 +1,2 @@
 # Kismet API Key (DO NOT COMMIT)
 kismet_api_key.txt
-
-# Python Virtual Environment
-.venv/
