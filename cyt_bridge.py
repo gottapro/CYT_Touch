@@ -1,210 +1,382 @@
+import http.server
+import socketserver
+import urllib.request
+import urllib.error
+import json
 import os
 import sys
-import json
-import asyncio
-import aiohttp
-from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
+import traceback
 
-# Load environment variables from .env file
-load_dotenv()
+# Load API key from environment or file
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+if not GEMINI_API_KEY and os.path.exists('.env'):
+    with open('.env') as f:
+        for line in f:
+            if line.startswith('VITE_API_KEY='):
+                GEMINI_API_KEY = line.split('=', 1)[1].strip()
+                break
 
-# --- Configuration ---
-GEMINI_API_KEY = os.getenv('VITE_API_KEY')
-KISMET_API_KEY = os.getenv('KISMET_API_KEY')
-KISMET_URL = os.getenv('KISMET_URL', 'http://localhost:2501')
-PORT = int(os.getenv('PORT', 5000))
-ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000').split(',')
-
-# --- FastAPI App Initialization ---
-app = FastAPI(
-    title="CYT Touch Bridge",
-    description="A proxy server to connect the CYT Touch frontend with Kismet and AI services.",
-    version="2.0.0"
-)
-
-# --- CORS Middleware ---
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# --- Reusable HTTP Client Session ---
-@app.on_event("startup")
-async def startup_event():
-    app.state.http_session = aiohttp.ClientSession()
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    await app.state.http_session.close()
-
-# --- Helper Functions ---
-def get_cpu_temp():
-    """Read the Raspberry Pi CPU temperature."""
-    if sys.platform != "linux":
-        return 0.0
-    try:
-        with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
-            temp_str = f.read().strip()
-            return float(temp_str) / 1000.0
-    except Exception:
-        return 0.0
-
-async def analyze_device_with_gemini(device_data: dict):
-    """Asynchronously call the Gemini API."""
+def analyze_device_with_gemini(device_data):
+    """Call Gemini API - fully ASCII-safe including logs"""
+    print(f"\n{'='*60}")
+    print(f"[DEBUG] Starting analysis for device: {device_data.get('mac')}")
+    
     if not GEMINI_API_KEY:
+        print("[ERROR] No API key found!")
         return {
             'summary': 'API Key not configured on server',
             'threatScore': 0,
             'recommendation': 'Config Error'
         }
-
-    prompt = f"""Analyze this WiFi/Bluetooth device for security threats based on the data below.
-
-**Device Data:**
-- **MAC Address:** {device_data.get('mac', 'N/A')}
-- **Vendor:** {device_data.get('vendor', 'Unknown')}
-- **Advertised Name/SSID:** {device_data.get('ssid', 'Hidden')}
-- **Signal Strength:** {device_data.get('rssi', -90)} dBm
-- **Device Type:** {device_data.get('type', 'Unknown')}
-- **Probed SSIDs:** {', '.join(device_data.get('probedSSIDs', []))}
-
-**Your Task:**
-Provide a concise security analysis. Your response MUST be a single, clean JSON object with no extra formatting, markdown, or text.
-
-**JSON Structure:**
-{{
-  "summary": "Your brief, one-sentence analysis here.",
-  "threatScore": <integer between 0 and 100>,
-  "recommendation": "A short, actionable recommendation (e.g., 'Monitor', 'Investigate', 'Benign')."
-}}
-"""
-
-    payload = {
-        'contents': [{'parts': [{'text': prompt}]}],
-        'generationConfig': {'temperature': 0.7, 'maxOutputTokens': 500}
-    }
     
-    api_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}'
-
+    print(f"[DEBUG] API Key present: {GEMINI_API_KEY[:8]}...")
+    
     try:
-        async with app.state.http_session.post(api_url, json=payload, timeout=15) as response:
-            if response.status != 200:
-                error_text = await response.text()
-                return {
-                    'summary': f'Gemini API Error: {response.status}',
-                    'threatScore': 0,
-                    'recommendation': 'API Error'
-                }
+        # Safely process all fields
+        mac = str(device_data.get('mac', 'Unknown')).encode('ascii', 'ignore').decode('ascii') or 'Unknown'
+        vendor = str(device_data.get('vendor', 'Unknown')).encode('ascii', 'ignore').decode('ascii') or 'Unknown'
+        ssid = str(device_data.get('ssid', 'Hidden')).encode('ascii', 'ignore').decode('ascii') or 'Hidden'
+        device_type = str(device_data.get('type', 'Unknown')).encode('ascii', 'ignore').decode('ascii') or 'Unknown'
+        
+        probed_ssids = device_data.get('probedSSIDs', [])
+        probed_safe = []
+        for s in probed_ssids:
+            safe = str(s).encode('ascii', 'ignore').decode('ascii')
+            if safe:
+                probed_safe.append(safe)
+        probed_str = ', '.join(probed_safe) if probed_safe else 'None'
+        
+        print("[DEBUG] All fields processed")
+        
+        # Build prompt
+        prompt = f"""Analyze this WiFi device for security threats:
+
+MAC: {mac}
+Vendor: {vendor}
+SSID: {ssid}
+Signal: {device_data.get('rssi', -90)} dBm
+Type: {device_type}
+Persistence: {int(device_data.get('persistenceScore', 0) * 100)}%
+Probed SSIDs: {probed_str}
+
+Provide a brief security analysis. Respond with JSON only:
+{{"summary": "brief analysis", "threatScore": 0, "recommendation": "Ignore"}}"""
+        
+        print(f"[DEBUG] Prompt created ({len(prompt)} chars)")
+        
+        # Try API endpoints
+        api_endpoints = [
+            ('v1beta', 'gemini-2.0-flash-exp'),
+            ('v1', 'gemini-1.5-flash'),
+            ('v1beta', 'gemini-1.5-flash'),
+            ('v1', 'gemini-pro'),
+        ]
+        
+        payload = {
+            'contents': [{
+                'parts': [{'text': prompt}]
+            }],
+            'generationConfig': {
+                'temperature': 0.7,
+                'maxOutputTokens': 500
+            }
+        }
+        
+        for api_version, model in api_endpoints:
+            try:
+                url = f'https://generativelanguage.googleapis.com/{api_version}/models/{model}:generateContent'
+                print(f"[DEBUG] Trying: {api_version}/{model}")
+                
+                # Serialize and encode
+                payload_json = json.dumps(payload)
+                payload_bytes = payload_json.encode('utf-8')
+                
+                # Make request
+                req = urllib.request.Request(
+                    f"{url}?key={GEMINI_API_KEY}",
+                    data=payload_bytes,
+                    headers={'Content-Type': 'application/json; charset=utf-8'},
+                    method='POST'
+                )
+                
+                with urllib.request.urlopen(req, timeout=15) as response:
+                    response_text = response.read().decode('utf-8')
+                    print(f"[DEBUG] SUCCESS with {model}")
+                    
+                    result = json.loads(response_text)
+                    
+                    # Parse response
+                    if 'candidates' not in result or len(result['candidates']) == 0:
+                        print(f"[WARN] No candidates, trying next")
+                        continue
+                    
+                    candidate = result['candidates'][0]
+                    
+                    if 'content' not in candidate:
+                        print(f"[WARN] No content, trying next")
+                        continue
+                    
+                    content = candidate['content']
+                    
+                    if 'parts' not in content or len(content['parts']) == 0:
+                        print(f"[WARN] No parts, trying next")
+                        continue
+                    
+                    text = content['parts'][0].get('text', '')
+                    print(f"[DEBUG] Got response ({len(text)} chars)")
+                    
+                    # Clean and parse
+                    import re
+                    text = text.strip()
+                    text = re.sub(r'^```json\s*', '', text)
+                    text = re.sub(r'^```\s*', '', text)
+                    text = re.sub(r'\s*```$', '', text)
+                    text = text.strip()
+                    
+                    try:
+                        parsed = json.loads(text)
+                        result = {
+                            'summary': str(parsed.get('summary', 'Analysis completed'))[:500],
+                            'threatScore': int(parsed.get('threatScore', 50)),
+                            'recommendation': str(parsed.get('recommendation', 'Monitor'))
+                        }
+                        print(f"[DEBUG] Analysis complete - Score: {result['threatScore']}")
+                        print(f"{'='*60}\n")
+                        return result
+                    except json.JSONDecodeError:
+                        # Fallback: use text as summary
+                        print(f"[WARN] Could not parse JSON, using text")
+                        return {
+                            'summary': text[:200] if text else 'No text returned',
+                            'threatScore': 50,
+                            'recommendation': 'Monitor'
+                        }
             
-            result = await response.json()
+            except urllib.error.HTTPError as e:
+                print(f"[WARN] HTTP {e.code} for {model}")
+                if e.code == 429:
+                    return {
+                        'summary': 'Rate limit exceeded. Wait 60 seconds.',
+                        'threatScore': 0,
+                        'recommendation': 'Wait'
+                    }
+                continue
             
-            text_content = result['candidates'][0]['content']['parts'][0]['text']
-            # Clean the response to get only the JSON
-            json_text = text_content.strip().replace('```json', '').replace('```', '').strip()
-            
-            return json.loads(json_text)
-            
-    except Exception as e:
+            except Exception as e:
+                print(f"[ERROR] {type(e).__name__} for {model}")
+                continue
+        
+        # All endpoints failed
+        print(f"[ERROR] All API endpoints failed")
         return {
-            'summary': f'Server error during analysis: {str(e)}',
+            'summary': 'All API endpoints failed. Check logs.',
+            'threatScore': 0,
+            'recommendation': 'Error'
+        }
+    
+    except Exception as e:
+        print(f"[ERROR] Top-level error: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
+        return {
+            'summary': f'Server error: {type(e).__name__}',
             'threatScore': 0,
             'recommendation': 'Error'
         }
 
-# --- API Endpoints ---
-@app.get("/system")
-async def get_system_stats():
-    """Returns system health statistics like CPU temperature."""
-    return JSONResponse(content={
-        'cpu_temp': get_cpu_temp(),
-        'status': 'online',
-        'backend': 'kismet'
-    })
 
-@app.get("/devices")
-async def stream_kismet_devices():
-    """Streams device data from the Kismet server."""
-    fields = [
-        "kismet.device.base.macaddr", "kismet.device.base.name",
-        "kismet.device.base.commonname", "kismet.device.base.manuf",
-        "kismet.device.base.signal", "kismet.device.base.location",
-        "kismet.device.base.first_time", "kismet.device.base.last_time",
-        "kismet.device.base.phyname", "kismet.device.base.type",
-        "dot11.device", "bluetooth.device", "ble.device"
-    ]
-    url = f"{KISMET_URL}/devices/views/all/devices.json?fields={','.join(fields)}"
-    headers = {}
-    if KISMET_API_KEY:
-        headers['Cookie'] = f"KISMET={KISMET_API_KEY}"
+# Configuration
+PORT = 5000
+KISMET_URL = "http://localhost:2501"
 
-    try:
-        async def device_streamer():
-            async with app.state.http_session.get(url, headers=headers, timeout=30) as response:
-                if response.status != 200:
-                    yield json.dumps({
+class CytBridgeHandler(http.server.SimpleHTTPRequestHandler):
+    """
+    A Bridge Server to proxy requests from the React Web App to Kismet.
+    This solves the CORS (Cross-Origin) security blocks browsers enforce.
+    """
+    def _set_headers(self, content_type='application/json'):
+        self.send_header('Content-type', content_type)
+        self.send_header('Access-Control-Allow-Origin', '*')  # Allow the Web App to connect
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
+    def do_OPTIONS(self):
+        """Handle preflight CORS checks."""
+        self.send_response(200)
+        self._set_headers()
+
+    def get_cpu_temp(self):
+        """Read the Raspberry Pi CPU temperature."""
+        if sys.platform != "linux":
+            return 0.0
+        try:
+            with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
+                temp_str = f.read().strip()
+                # Value is in millidegrees, convert to Celsius
+                return float(temp_str) / 1000.0
+        except:
+            return 0.0
+
+    def do_GET(self):
+        """Handle GET requests for data."""
+        # Endpoint: System Health (CPU Temp)
+        if self.path == '/system':
+            try:
+                self.send_response(200)
+                self._set_headers()
+                stats = {
+                    'cpu_temp': self.get_cpu_temp(),
+                    'status': 'online',
+                    'backend': 'kismet'
+                }
+                self.wfile.write(json.dumps(stats).encode())
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            return
+
+        # Endpoint: Device Data (Proxy to Kismet)
+        if self.path == '/devices':
+            try:
+                # 1. Get API Key (if exists)
+                api_key = ""
+                if os.path.exists("kismet_api_key.txt"):
+                    with open("kismet_api_key.txt", "r") as f:
+                        api_key = f.read().strip()
+
+                # 2. Connect to Kismet
+                # OPTIMIZATION: Request only the fields we need to reduce payload size significantly.
+                # CRITICAL FIX: Added dot11.device to get probed SSIDs
+                base_url = f"{KISMET_URL}/devices/views/all/devices.json"
+                fields = [
+                    "kismet.device.base.macaddr",
+                    "kismet.device.base.name",
+                    "kismet.device.base.commonname",
+                    "kismet.device.base.manuf",
+                    "kismet.device.base.signal",
+                    "kismet.device.base.location",
+                    "kismet.device.base.first_time",
+                    "kismet.device.base.last_time",
+                    "kismet.device.base.phyname",
+                    "kismet.device.base.type",
+                    "dot11.device"  # THIS IS THE FIX - contains probed_ssid_map
+                ]
+
+                # Join fields with comma
+                field_param = ",".join(fields)
+
+                # Construct final URL
+                url = f"{base_url}?fields={field_param}"
+                print(f"Fetching: {url}")  # Debug log
+
+                req = urllib.request.Request(url)
+                if api_key:
+                    req.add_header('Cookie', f"KISMET={api_key}")
+
+                # 3. Fetch & Stream Data
+                with urllib.request.urlopen(req, timeout=25) as response:
+                    self.send_response(200)
+                    self._set_headers()
+                    # Stream the data in chunks to avoid loading the entire 50MB+ JSON into RAM
+                    while True:
+                        chunk = response.read(8192)  # 8KB chunks
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            except urllib.error.URLError as e:
+                # Kismet is probably not running
+                print(f"Error connecting to Kismet: {e}")
+                try:
+                    self.send_response(502)
+                    self._set_headers()
+                    error_msg = {
                         'error': 'Could not connect to Kismet',
-                        'details': f'Status: {response.status}',
-                        'suggestion': 'Ensure Kismet is running and the API key (if any) is correct.'
-                    }).encode()
-                    return
+                        'details': str(e),
+                        'suggestion': 'Ensure Kismet is running (systemctl start kismet)'
+                    }
+                    self.wfile.write(json.dumps(error_msg).encode())
+                except:
+                    pass
+            except Exception as e:
+                # Log the full error to the console so we know what went wrong
+                print(f"INTERNAL ERROR in /devices: {e}")
+                traceback.print_exc()
+                try:
+                    self.send_response(500)
+                    self._set_headers()
+                    self.wfile.write(json.dumps({'error': str(e)}).encode())
+                except:
+                    pass
+            return
 
-                async for chunk in response.content.iter_chunked(8192):
-                    yield chunk
+        # Default: Not Found
+        self.send_response(404)
+        self.end_headers()
+
+    def do_POST(self):
+        """Handle POST requests for commands."""
         
-        return StreamingResponse(device_streamer(), media_type="application/json")
-
-    except aiohttp.ClientConnectorError as e:
-        raise HTTPException(status_code=502, detail=f"Kismet connection failed: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}")
-
-@app.post("/analyze")
-async def analyze_device(request: Request):
-    """Receives device data and returns a Gemini-based security analysis."""
-    try:
-        device_data = await request.json()
-        result = await analyze_device_with_gemini(device_data)
-        return JSONResponse(content=result)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON data.")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to analyze device: {e}")
-
-@app.post("/purge")
-async def purge_kismet_data():
-    """Executes the Kismet data cleaning script."""
-    script_path = "./clean_kismet.sh"
-    if not os.path.exists(script_path):
-        raise HTTPException(status_code=404, detail="clean_kismet.sh script not found.")
-    
-    try:
-        # Make the script executable
-        os.chmod(script_path, 0o755)
+        # AI Analysis Endpoint
+        if self.path == '/analyze':
+            try:
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                device_data = json.loads(post_data)
+                
+                print(f"[INFO] Analyzing device: {device_data.get('mac')}")
+                result = analyze_device_with_gemini(device_data)
+                
+                self.send_response(200)
+                self._set_headers()
+                self.wfile.write(json.dumps(result).encode())
+            except Exception as e:
+                print(f"[ERROR] Analysis endpoint error: {e}")
+                import traceback
+                traceback.print_exc()
+                
+                try:
+                    self.send_response(500)
+                    self._set_headers()
+                    self.wfile.write(json.dumps({
+                        'summary': f'Server error: {str(e)}',
+                        'threatScore': 0,
+                        'recommendation': 'Error'
+                    }).encode())
+                except:
+                    pass
+            return
         
-        # Run the script
-        process = await asyncio.create_subprocess_shell(script_path)
-        await process.wait()
+        # Endpoint: Purge/Reset
+        if self.path == '/purge':
+            print("Command received: Purge Kismet Data")
+            try:
+                # Make script executable and run it
+                os.system("chmod +x ./clean_kismet.sh")
+                os.system("./clean_kismet.sh")
+                
+                self.send_response(200)
+                self._set_headers()
+                self.wfile.write(json.dumps({'status': 'executed', 'message': 'Purge command received'}).encode())
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            return
         
-        if process.returncode == 0:
-            return JSONResponse(content={'status': 'executed', 'message': 'Purge command completed successfully.'})
-        else:
-            raise HTTPException(status_code=500, detail="Purge script failed to execute.")
-            
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to execute purge script: {e}")
+        self.send_response(404)
+        self.end_headers()
 
-# --- Main Execution ---
 if __name__ == "__main__":
-    print("--- CYT Bridge Server (v2.0) ---")
-    print(f"INFO:     Allowed Origins: {ALLOWED_ORIGINS}")
-    print(f"INFO:     Kismet URL: {KISMET_URL}")
-    print(f"INFO:     Starting server on port {PORT}")
-    print("------------------------------------")
-    uvicorn.run(app, host="0.0.0.0", port=PORT)
+    # Allow the port to be reused immediately after restart
+    socketserver.ThreadingTCPServer.allow_reuse_address = True
+    with socketserver.ThreadingTCPServer(("", PORT), CytBridgeHandler) as httpd:
+        print("------------------------------------------------")
+        print(f" CYT Bridge Server Running on Port {PORT}")
+        print(f" Target Kismet URL: {KISMET_URL}")
+        print("------------------------------------------------")
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            print("\nStopping Bridge Server.")
+            sys.exit(0)
