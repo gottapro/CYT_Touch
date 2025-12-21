@@ -18,6 +18,10 @@ CYT Touch is a professional-grade, touch-optimized interface for real-time wirel
 *   **Behavioral Tracking:** Automatically flags devices that persist near you for extended periods (>15 mins).
 *   **Movement Correlation:** Elevates threats to **"Chasing"** status *only* if they follow you across significant distances (>500m), filtering out stationary neighbors.
 *   **MAC Address Randomization Defeat:** Intelligently identifies and tracks devices that frequently change their MAC address. If a new device appears with a similar signal strength, vendor, and probed SSIDs as a recently seen device, the system merges them, preserving the device's history under the new MAC.
+*   **Covert Tracker Detection:** The application has a specific category for known trackers like Tile and Apple AirTags. Here's how it works:
+    1.  **Detection:** It identifies potential trackers by looking for `Bluetooth LE` devices whose manufacturer is listed as `Apple` or `Tile`.
+    2.  **Alert Level:** When a match is found, the device is automatically assigned a `ThreatLevel.SUSPICIOUS` status.
+    3.  **UI Indication:** In the dashboard, these devices will be highlighted with a yellow border and label, making them easy to spot. This does not trigger the full-screen "Red Alert," which is reserved for `ThreatLevel.HIGH` devices like hacking hardware.
 *   **GPS History:** Records a breadcrumb trail of coordinates for every device to visualize its movement path relative to yours.
 
 ### 💾 Session Persistence & Statistics (New in v1.2)
