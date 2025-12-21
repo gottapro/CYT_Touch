@@ -10,6 +10,7 @@ CYT Touch is a professional-grade, touch-optimized interface for real-time wirel
 
 ### 📡 Real-Time Monitoring
 *   **Multi-Spectrum:** Detects **Wi-Fi Access Points**, **Clients**, **Bluetooth**, and **BLE** devices simultaneously.
+*   **Tracker Detection:** Specifically identifies **Apple AirTags**, **Tile trackers**, and similar devices operating on BLE.
 *   **Visual Identification:** Instantly distinguishes between Infrastructure (Routers) and Clients (Phones/Laptops) with distinct iconography.
 *   **High-Performance:** Streaming architecture handles 400+ active devices on a Raspberry Pi without lag.
 
