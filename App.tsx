@@ -120,6 +120,7 @@ const App: React.FC = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [devices, setDevices] = useState<WifiDevice[]>([]);
   const [filter, setFilter] = useState<'all' | 'tracked' | 'ignored'>('all');
+  const [deviceTypeFilter, setDeviceTypeFilter] = useState<'all' | 'wifi' | 'bluetooth' | 'ble'>('all');
   const [sortOrder, setSortOrder] = useState<'lastSeen' | 'rssi' | 'firstSeen'>('lastSeen');
   const [searchTerm, setSearchTerm] = useState('');
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'error' | 'idle'>('idle');
@@ -273,6 +274,32 @@ const App: React.FC = () => {
     return null;
   };
 
+  const findMacSwitcher = (newDevice: WifiDevice, existingDevices: WifiDevice[]): WifiDevice | null => {
+    // Heuristic for MAC switching:
+    // 1. Must be a recently seen device (within last 2 mins)
+    // 2. Must have a similar signal strength (+/- 10 dBm)
+    // 3. Must share the same vendor (if not 'Unknown')
+    // 4. Must share at least one probed SSID
+    const recentDevices = existingDevices.filter(d => (Date.now() - d.lastSeen) < 120000);
+    if (recentDevices.length === 0) return null;
+
+    for (const oldDevice of recentDevices) {
+      const rssiDifference = Math.abs(oldDevice.rssi - newDevice.rssi);
+      if (rssiDifference > 15) continue; // Allow a wider berth for signal fluctuation
+
+      const sameVendor = oldDevice.vendor === newDevice.vendor && oldDevice.vendor !== 'Unknown';
+      if (!sameVendor) continue;
+
+      const sharedProbes = oldDevice.probedSSIDs.filter(p => newDevice.probedSSIDs.includes(p));
+      if (sharedProbes.length === 0) continue;
+
+      // If we get here, it's a strong candidate
+      return oldDevice;
+    }
+
+    return null;
+  };
+
 const updateDevices = useCallback((prevDevices: WifiDevice[], newReadings: WifiDevice[]) => {
   const now = Date.now();
   const map = new Map(prevDevices.map(d => [d.mac, d]));
@@ -356,19 +383,33 @@ const updateDevices = useCallback((prevDevices: WifiDevice[], newReadings: WifiD
         currentDevice.firstSeenUserPos = { ...currentUserLocation };
       }
 
-      const match = findFingerprintMatch(currentDevice.probedSSIDs, Array.from(map.values()));
-      if (match) {
-        currentDevice.suspectedAlias = match.mac;
-        if (match.isTracked) {
-          currentDevice.isTracked = true;
-          currentDevice.notes = `Auto-tracked: Alias of ${match.mac}`;
-        }
-        if (match.threatLevel === ThreatLevel.HIGH || match.threatLevel === ThreatLevel.SUSPICIOUS) {
-          currentDevice.threatLevel = match.threatLevel;
-        }
-      }
+      const switcher = findMacSwitcher(currentDevice, Array.from(map.values()));
+      if (switcher) {
+        // This new MAC is likely the old one. Merge them.
+        const mergedDevice = { ...switcher };
+        mergedDevice.mac = currentDevice.mac; // Adopt the new MAC
+        mergedDevice.lastSeen = now;
+        mergedDevice.rssi = currentDevice.rssi; // Update to latest signal
+        mergedDevice.pastMacs = [...(switcher.pastMacs || []), switcher.mac];
+        mergedDevice.notes = `MAC changed from ${switcher.mac.slice(-5)}. Tracking as new MAC.`;
 
-      map.set(currentDevice.mac, currentDevice);
+        map.delete(switcher.mac); // Remove the old entry
+        map.set(currentDevice.mac, mergedDevice);
+
+      } else {
+        const match = findFingerprintMatch(currentDevice.probedSSIDs, Array.from(map.values()));
+        if (match) {
+          currentDevice.suspectedAlias = match.mac;
+          if (match.isTracked) {
+            currentDevice.isTracked = true;
+            currentDevice.notes = `Auto-tracked: Alias of ${match.mac}`;
+          }
+          if (match.threatLevel === ThreatLevel.HIGH || match.threatLevel === ThreatLevel.SUSPICIOUS) {
+            currentDevice.threatLevel = match.threatLevel;
+          }
+        }
+        map.set(currentDevice.mac, currentDevice);
+      }
     }
 
     // --- RED ALERT TRIGGER ---
@@ -686,6 +727,13 @@ const parseBackendData = (data: any): WifiDevice[] => {
     if (d.isIgnored) return false;
   }
 
+  // Apply device type filter
+  if (deviceTypeFilter === 'wifi') {
+    if (d.type === DeviceType.BLUETOOTH || d.type === DeviceType.BLE) return false;
+  } else if (deviceTypeFilter === 'bluetooth') {
+    if (d.type !== DeviceType.BLUETOOTH && d.type !== DeviceType.BLE) return false;
+  }
+
   // Apply search filter if search term exists
   if (searchTerm) {
     const term = searchTerm.toLowerCase();
@@ -805,6 +853,28 @@ const parseBackendData = (data: any): WifiDevice[] => {
                     className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${filter === 'ignored' ? 'bg-slate-600 text-white shadow ring-1 ring-slate-500' : 'text-slate-400 hover:text-slate-200'}`}
                   >
                     Tail ({devices.filter(d => d.isIgnored).length})
+                  </button>
+                </div>
+
+                {/* Sub-filter for device type */}
+                <div className="flex p-1 bg-slate-800 rounded-xl mb-4 border border-slate-700">
+                  <button 
+                    onClick={() => setDeviceTypeFilter('all')}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${deviceTypeFilter === 'all' ? 'bg-slate-600' : 'text-slate-400'}`}
+                  >
+                    All
+                  </button>
+                  <button 
+                    onClick={() => setDeviceTypeFilter('wifi')}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${deviceTypeFilter === 'wifi' ? 'bg-slate-600' : 'text-slate-400'}`}
+                  >
+                    Wi-Fi
+                  </button>
+                  <button 
+                    onClick={() => setDeviceTypeFilter('bluetooth')}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${deviceTypeFilter === 'bluetooth' ? 'bg-slate-600' : 'text-slate-400'}`}
+                  >
+                    Bluetooth
                   </button>
                 </div>
         

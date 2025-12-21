@@ -42,6 +42,7 @@ export interface WifiDevice {
   
   // Fingerprinting
   suspectedAlias?: string; // MAC address of the device this likely is (based on probe matching)
+  pastMacs?: string[];
 }
 
 export interface LogEntry {
